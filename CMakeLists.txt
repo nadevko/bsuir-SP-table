@@ -11,8 +11,5 @@ find_package(Fontconfig REQUIRED)
 
 add_executable(bsuir-sp src/main.c src/main.h)
 
-target_link_libraries(bsuir-sp PRIVATE
-    SDL3::SDL3
-    SDL3_ttf::SDL3_ttf
-    Fontconfig::Fontconfig
-)
+target_link_libraries(bsuir-sp PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf
+                                       Fontconfig::Fontconfig)

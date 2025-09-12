@@ -1,8 +1,4 @@
 #include "main.h"
-#include "SDL3/SDL_events.h"
-#include "SDL3/SDL_render.h"
-#include "SDL3/SDL_surface.h"
-#include <SDL3_ttf/SDL_ttf.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -75,10 +71,14 @@ void draw() {
 
 #ifdef WITH_COLUMN_TITLE
   float cell_x = x;
+  int length = COLUMN_TITLE_TEXT_BASE_LENGTH + 1;
 
-  for (int col = 0; col < cols; cell_x += cell_w, col++) {
-    SDL_Surface *labelSurface =
-        TTF_RenderText_Blended(g_font, "column", 6, COLUMN_TITLE_TEXT_COLOUR);
+  for (int col = 0; col < cols; cell_x += cell_w) {
+    char buffer[(col % 10 == 9 ? ++length : length) + 1];
+    snprintf(buffer, sizeof(buffer), COLUMN_TITLE_TEXT_LABEL, ++col);
+
+    SDL_Surface *labelSurface = TTF_RenderText_Blended(
+        g_font, buffer, length, COLUMN_TITLE_TEXT_COLOUR);
 
     SDL_Texture *labelTexture =
         SDL_CreateTextureFromSurface(g_renderer, labelSurface);

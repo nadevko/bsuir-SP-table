@@ -24,7 +24,8 @@
 
 #define WITH_COLUMN_TITLE
 
-#define COLUMN_TITLE_TEXT_LABEL ""
+#define COLUMN_TITLE_TEXT_LABEL "Column %i"
+#define COLUMN_TITLE_TEXT_BASE_LENGTH 7
 #define COLUMN_TITLE_TEXT_NAME "DejaVu Sans"
 #define COLUMN_TITLE_TEXT_SIZE 16.0
 #define COLUMN_TITLE_TEXT_COLOUR (SDL_Color){100, 100, 100, 255}
@@ -33,7 +34,7 @@
 
 #define ANY_CHECK(call, msg)                                                   \
   if (!(call)) {                                                               \
-    fprintf(stderr, "%s\n", msg);                                          \
+    fprintf(stderr, "%s\n", msg);                                              \
     return 1;                                                                  \
   }
 
