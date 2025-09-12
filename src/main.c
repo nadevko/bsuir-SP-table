@@ -1,10 +1,10 @@
 #include "main.h"
+#include "SDL3/SDL_video.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 static SDL_Renderer *g_renderer = nullptr;
 static SDL_Window *g_window = nullptr;
-static bool g_window_fullscreened = true;
 
 static int rows = DEFAULT_ROWS;
 static int cols = DEFAULT_COLS;
@@ -99,12 +99,11 @@ int main(int argc, char *argv[]) {
   atexit(cleanup);
 
   SDL_CHECK(SDL_CreateWindowAndRenderer("Grid Example", 300, 480,
-                                        SDL_WINDOW_RESIZABLE, &g_window,
-                                        &g_renderer),
+                                        SDL_WINDOW_HIGH_PIXEL_DENSITY |
+                                            SDL_WINDOW_FULLSCREEN |
+                                            SDL_WINDOW_BORDERLESS,
+                                        &g_window, &g_renderer),
             "Window and renderer creation failed", return 1);
-
-  SDL_CHECK(SDL_SetWindowFullscreen(g_window, g_window_fullscreened),
-            "Failed to set fullscreen mode", g_window_fullscreened = false);
 
   bool running = true;
   SDL_Event event;
