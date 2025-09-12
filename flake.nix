@@ -39,6 +39,8 @@
             cmake
             sdl3
             sdl3.dev
+            libdecor
+            libdecor.dev
           ];
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath packages;
           vscode-settings = pkgs.writeText "settings.json" (
