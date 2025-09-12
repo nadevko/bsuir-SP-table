@@ -34,12 +34,11 @@
       {
         devShells.default = pkgs.mkShell.override { inherit (pkgs.llvmPackages) stdenv; } rec {
           packages = with pkgs; [
-            gdb
             llvmPackages.lldb
             cmake
-            sdl3
             sdl3.dev
             sdl3-ttf
+            fontconfig.dev
           ];
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath packages;
           vscode-settings = pkgs.writeText "settings.json" (

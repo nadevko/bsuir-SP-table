@@ -1,17 +1,13 @@
 #include "main.h"
-#include "SDL3/SDL_video.h"
+#include <fontconfig/fontconfig.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-static SDL_Renderer *g_renderer = nullptr;
-static SDL_Window *g_window = nullptr;
-
-static int rows = DEFAULT_ROWS;
-static int cols = DEFAULT_COLS;
-
-static constexpr float g_half_width = GRID_WIDTH / 2;
-
 static void cleanup(void) {
+  if (g_font != nullptr) {
+    TTF_CloseFont(g_font);
+    g_font = nullptr;
+  }
   if (g_renderer != nullptr) {
     SDL_DestroyRenderer(g_renderer);
     g_renderer = nullptr;
@@ -42,41 +38,45 @@ void draw() {
   h -= y + BORDER_WIDTH;
 
   SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){x, y, w, h});
-  SDL_SetRenderDrawColour(g_renderer, BACKGROUND_COLOUR);
+  SDL_SetRenderDrawColour(g_renderer, GRID_BACKGROUND_COLOUR);
   SDL_RenderFillRect(g_renderer, &(SDL_FRect){x, y, w, h});
 #else
-  SDL_SetRenderDrawColorSimple(g_renderer, BACKGROUND_COLOUR);
+  SDL_SetRenderDrawColorSimple(g_renderer, GRID_BACKGROUND_COLOUR);
   SDL_RenderClear(g_renderer);
 #endif
 
 #ifdef WITH_GRID
-  float half_width = GRID_WIDTH / 2;
-
   int count = rows + cols;
   SDL_FRect rects[count];
   int idx = 0;
 
-  float row_h = (float)h / rows;
-  SDL_FRect rect_row = {x, y - half_width, w, GRID_WIDTH};
+  float cell_h = (float)h / rows;
+  SDL_FRect grid_line_row = {x, y - GRID_LINE_HALF_WIDTH, w, GRID_LINE_WIDTH};
 
   for (int i = 1; i < rows; i++) {
-    rect_row.y += row_h;
-    rects[idx++] = rect_row;
+    grid_line_row.y += cell_h;
+    rects[idx++] = grid_line_row;
   }
 
-  float col_w = (float)w / cols;
-  SDL_FRect rect_col = {x - half_width, y, GRID_WIDTH, h};
+  float cell_w = (float)w / cols;
+  SDL_FRect grid_line_col = {x - GRID_LINE_HALF_WIDTH, y, GRID_LINE_WIDTH, h};
 
   for (int i = 1; i < cols; i++) {
-    rect_col.x += col_w;
-    rects[idx++] = rect_col;
+    grid_line_col.x += cell_w;
+    rects[idx++] = grid_line_col;
   }
 
-  SDL_SetRenderDrawColour(g_renderer, GRID_COLOUR);
+  SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
   SDL_RenderFillRects(g_renderer, rects, count);
 #endif
 
 #ifdef WITH_COLUMN_TITLE
+  float cell_x = x;
+
+  for (int col = 0; col < cols; col++) {
+    cell_x += cell_w;
+    // TTF_RenderText_Solid(TTF_Font *font, const char *text, size_t length, SDL_Color fg);
+  }
 #endif
 
   SDL_RenderPresent(g_renderer);
@@ -96,6 +96,7 @@ int main(int argc, char *argv[]) {
   }
 
   SDL_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL initialization failed", return 1);
+  SDL_CHECK(TTF_Init(), "SDL-ttf initialization failed", return 1);
   atexit(cleanup);
 
   SDL_CHECK(SDL_CreateWindowAndRenderer("Grid Example", 300, 480,
