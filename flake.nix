@@ -34,14 +34,26 @@
       {
         devShells.default = pkgs.mkShell.override { inherit (pkgs.llvmPackages) stdenv; } rec {
           packages = with pkgs; [
+            gdb
             llvmPackages.lldb
+            cmake
             sdl3
             sdl3.dev
-            cmake
           ];
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath packages;
           vscode-settings = pkgs.writeText "settings.json" (
-            builtins.toJSON { "clangd.path" = "${pkgs.clang-tools}/bin/clangd"; }
+            builtins.toJSON {
+              "clangd.path" = "${pkgs.clang-tools}/bin/clangd";
+              "cmake.buildType" = "Debug";
+              "cmake.debugConfig" = {
+                type = "lldb-dap";
+                request = "launch";
+                name = "Debug with LLDB DAP";
+                program = "\${command:cmake.launchTargetPath}";
+                args = [ ];
+                stopOnEntry = false;
+              };
+            }
           );
           shellHook = ''
             mkdir .vscode
