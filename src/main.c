@@ -8,11 +8,10 @@ static bool g_window_fullscreened = true;
 
 static int ROWS = 10;
 static int COLS = 10;
-constexpr float LINE_WIDTH = 1.0f;
+constexpr float lineWidth = 1.0f; // Thickness of grid lines
 
 constexpr SDL_Color BACKGROUND_COLOR = {240, 240, 240, 255}; // light gray
-constexpr SDL_FColor GRID_COLOR = {100.0f / 255.0f, 100.0f / 255.0f,
-                                   100.0f / 255.0f, 1.0f}; // dark gray
+constexpr SDL_Color GRID_COLOR = {100, 100, 100, 255};       // dark gray
 
 #define SDL_CHECK(call, msg, ret)                                              \
   if (!(call)) {                                                               \
@@ -38,80 +37,25 @@ void draw(float w, float h) {
                          BACKGROUND_COLOR.b, BACKGROUND_COLOR.a);
   SDL_RenderClear(g_renderer);
 
-  // Total number of lines: (COLS + 1) vertical + (ROWS + 1) horizontal
-  int total_lines = (COLS + 1) + (ROWS + 1);
-  int vertex_count = total_lines * 4; // 4 vertices per line (quad)
-  int index_count = total_lines * 6;  // 6 indices per quad (2 triangles)
-
-  // Allocate vertex and index arrays
-  SDL_Vertex *vertices =
-      (SDL_Vertex *)malloc(vertex_count * sizeof(SDL_Vertex));
-  int *indices = (int *)malloc(index_count * sizeof(int));
-  if (!vertices || !indices) {
-    fprintf(stderr, "Failed to allocate memory for vertices/indices\n");
-    return;
-  }
-
-  int v_idx = 0; // Vertex index
-  int i_idx = 0; // Index index
+  // Draw grid lines as rectangles
+  SDL_SetRenderDrawColor(g_renderer, GRID_COLOR.r, GRID_COLOR.g, GRID_COLOR.b,
+                         GRID_COLOR.a);
 
   // Vertical lines
   for (int i = 0; i <= COLS; ++i) {
-    float x = (float)i * w / COLS;
-    // Quad for vertical line: (x - LINE_WIDTH/2, 0) to (x + LINE_WIDTH/2, h)
-    vertices[v_idx + 0] =
-        (SDL_Vertex){{x - LINE_WIDTH / 2, 0}, GRID_COLOR, {0, 0}}; // Top-left
-    vertices[v_idx + 1] =
-        (SDL_Vertex){{x + LINE_WIDTH / 2, 0}, GRID_COLOR, {1, 0}}; // Top-right
-    vertices[v_idx + 2] = (SDL_Vertex){
-        {x - LINE_WIDTH / 2, h}, GRID_COLOR, {0, 1}}; // Bottom-left
-    vertices[v_idx + 3] = (SDL_Vertex){
-        {x + LINE_WIDTH / 2, h}, GRID_COLOR, {1, 1}}; // Bottom-right
-
-    // Indices for two triangles: {0, 1, 2} and {2, 1, 3}
-    indices[i_idx + 0] = v_idx + 0;
-    indices[i_idx + 1] = v_idx + 1;
-    indices[i_idx + 2] = v_idx + 2;
-    indices[i_idx + 3] = v_idx + 2;
-    indices[i_idx + 4] = v_idx + 1;
-    indices[i_idx + 5] = v_idx + 3;
-
-    v_idx += 4;
-    i_idx += 6;
+    float x = i * w / COLS;
+    SDL_FRect rect = {
+        .x = x - lineWidth / 2.0f, .y = 0.0f, .w = lineWidth, .h = h};
+    SDL_RenderFillRect(g_renderer, &rect);
   }
 
   // Horizontal lines
   for (int i = 0; i <= ROWS; ++i) {
-    float y = (float)i * h / ROWS;
-    // Quad for horizontal line: (0, y - LINE_WIDTH/2) to (w, y + LINE_WIDTH/2)
-    vertices[v_idx + 0] =
-        (SDL_Vertex){{0, y - LINE_WIDTH / 2}, GRID_COLOR, {0, 0}}; // Top-left
-    vertices[v_idx + 1] =
-        (SDL_Vertex){{w, y - LINE_WIDTH / 2}, GRID_COLOR, {1, 0}}; // Top-right
-    vertices[v_idx + 2] = (SDL_Vertex){
-        {0, y + LINE_WIDTH / 2}, GRID_COLOR, {0, 1}}; // Bottom-left
-    vertices[v_idx + 3] = (SDL_Vertex){
-        {w, y + LINE_WIDTH / 2}, GRID_COLOR, {1, 1}}; // Bottom-right
-
-    // Indices for two triangles
-    indices[i_idx + 0] = v_idx + 0;
-    indices[i_idx + 1] = v_idx + 1;
-    indices[i_idx + 2] = v_idx + 2;
-    indices[i_idx + 3] = v_idx + 2;
-    indices[i_idx + 4] = v_idx + 1;
-    indices[i_idx + 5] = v_idx + 3;
-
-    v_idx += 4;
-    i_idx += 6;
+    float y = i * h / ROWS;
+    SDL_FRect rect = {
+        .x = 0.0f, .y = y - lineWidth / 2.0f, .w = w, .h = lineWidth};
+    SDL_RenderFillRect(g_renderer, &rect);
   }
-
-  // Render all lines in one call
-  SDL_RenderGeometry(g_renderer, NULL, vertices, vertex_count, indices,
-                     index_count);
-
-  // Clean up
-  free(vertices);
-  free(indices);
 
   SDL_RenderPresent(g_renderer);
 }
