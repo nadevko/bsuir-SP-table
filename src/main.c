@@ -1,18 +1,11 @@
+#include "main.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-constexpr unsigned int ROWS = 10;
-constexpr unsigned int COLS = 10;
-
 static SDL_Renderer *g_renderer = nullptr;
 static SDL_Window *g_window = nullptr;
 static bool g_window_fullscreened = true;
-
-constexpr SDL_Color BACKGROUND_COLOR = {240, 240, 240, 255};
-
-constexpr int BORDER_WIDTH = 200;
-constexpr SDL_Color BORDER_COLOR = {100, 100, 100, 255};
 
 // constexpr int lineWidth = 8;
 // constexpr float margin = 0.0f;
@@ -49,31 +42,6 @@ static void cleanup(void) {
 }
 
 // void draw(float x1, float y1, float x2, float y2) {
-//   SDL_SetRenderDrawColor(g_renderer, OUTER_COLOR.r, OUTER_COLOR.g,
-//                          OUTER_COLOR.b, OUTER_COLOR.a);
-//   SDL_RenderClear(g_renderer);
-
-//   float grid_x1 = x1;
-//   float grid_y1 = y1;
-//   float grid_x2 = x2;
-//   float grid_y2 = y2;
-
-// #ifdef DRAW_GRID_BORDER
-//   SDL_SetRenderDrawColor(g_renderer, BORDER_COLOR.r, BORDER_COLOR.g,
-//                          BORDER_COLOR.b, BORDER_COLOR.a);
-//   SDL_FRect border_rect = {.x = x1, .y = y1, .w = x2 - x1, .h = y2 - y1};
-//   SDL_RenderFillRect(g_renderer, &border_rect);
-
-//   grid_x1 += borderWidth;
-//   grid_y1 += borderWidth;
-//   grid_x2 -= borderWidth;
-//   grid_y2 -= borderWidth;
-
-//   if (grid_x2 <= grid_x1 || grid_y2 <= grid_y1) {
-//     SDL_RenderPresent(g_renderer);
-//     return;
-//   }
-// #endif
 
 //   SDL_SetRenderDrawColor(g_renderer, BACKGROUND_COLOR.r, BACKGROUND_COLOR.g,
 //                          BACKGROUND_COLOR.b, BACKGROUND_COLOR.a);
