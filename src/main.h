@@ -2,6 +2,7 @@
 #define _IS_LOADED_SRC_MAIN_H
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
+#include <fontconfig/fontconfig.h>
 
 // --- CONFIG ---
 
@@ -23,15 +24,23 @@
 
 #define WITH_COLUMN_TITLE
 
-#define COLUMN_TITLE_TEXT ""
-#define COLUMN_TITLE_COLOUR (SDL_Color){100, 100, 100, 255}
+#define COLUMN_TITLE_TEXT_LABEL ""
+#define COLUMN_TITLE_TEXT_NAME "DejaVu Sans"
+#define COLUMN_TITLE_TEXT_SIZE 16.0
+#define COLUMN_TITLE_TEXT_COLOUR (SDL_Color){100, 100, 100, 255}
 
 // --- END CONFIG ---
 
-#define SDL_CHECK(call, msg, ret)                                              \
+#define ANY_CHECK(call, msg)                                                   \
+  if (!(call)) {                                                               \
+    fprintf(stderr, "%s\n", msg);                                          \
+    return 1;                                                                  \
+  }
+
+#define SDL_CHECK(call, msg)                                                   \
   if (!(call)) {                                                               \
     fprintf(stderr, "%s: %s\n", msg, SDL_GetError());                          \
-    ret;                                                                       \
+    return 1;                                                                  \
   }
 
 #define GRID_LINE_HALF_WIDTH GRID_LINE_WIDTH / 2

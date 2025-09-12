@@ -1,9 +1,12 @@
 #include "main.h"
-#include <fontconfig/fontconfig.h>
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_render.h"
+#include "SDL3/SDL_surface.h"
+#include <SDL3_ttf/SDL_ttf.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-static void cleanup(void) {
+void cleanup(void) {
   if (g_font != nullptr) {
     TTF_CloseFont(g_font);
     g_font = nullptr;
@@ -73,9 +76,18 @@ void draw() {
 #ifdef WITH_COLUMN_TITLE
   float cell_x = x;
 
-  for (int col = 0; col < cols; col++) {
-    cell_x += cell_w;
-    // TTF_RenderText_Solid(TTF_Font *font, const char *text, size_t length, SDL_Color fg);
+  for (int col = 0; col < cols; cell_x += cell_w, col++) {
+    SDL_Surface *labelSurface =
+        TTF_RenderText_Blended(g_font, "column", 6, COLUMN_TITLE_TEXT_COLOUR);
+
+    SDL_Texture *labelTexture =
+        SDL_CreateTextureFromSurface(g_renderer, labelSurface);
+    SDL_DestroySurface(labelSurface);
+
+    SDL_RenderTexture(
+        g_renderer, labelTexture, nullptr,
+        &(SDL_FRect){cell_x, y, cell_w - GRID_LINE_WIDTH, cell_h});
+    SDL_DestroyTexture(labelTexture);
   }
 #endif
 
@@ -95,16 +107,46 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  SDL_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL initialization failed", return 1);
-  SDL_CHECK(TTF_Init(), "SDL-ttf initialization failed", return 1);
   atexit(cleanup);
+
+  SDL_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL initialisation failed");
+  SDL_CHECK(TTF_Init(), "SDL-ttf initialisation failed");
+
+#ifdef WITH_COLUMN_TITLE
+  FcConfig *fontconfig;
+
+  ANY_CHECK(fontconfig = FcInitLoadConfigAndFonts(),
+            "FcConfig initialisation failed");
+
+  FcPattern *pattern;
+  ANY_CHECK(pattern = FcNameParse((const FcChar8 *)COLUMN_TITLE_TEXT_NAME),
+            "Failed to parse font name");
+
+  FcConfigSubstitute(fontconfig, pattern, FcMatchPattern);
+  FcDefaultSubstitute(pattern);
+
+  FcResult result;
+  FcPattern *match;
+  ANY_CHECK(match = FcFontMatch(fontconfig, pattern, &result),
+            "Failed to resolve font");
+
+  FcChar8 *file = nullptr;
+  ANY_CHECK(FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch,
+            "Failed to find font file");
+
+  g_font = TTF_OpenFont((const char *)file, COLUMN_TITLE_TEXT_SIZE);
+
+  FcPatternDestroy(pattern);
+  FcPatternDestroy(match);
+  FcConfigDestroy(fontconfig);
+#endif
 
   SDL_CHECK(SDL_CreateWindowAndRenderer("Grid Example", 300, 480,
                                         SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                             SDL_WINDOW_FULLSCREEN |
                                             SDL_WINDOW_BORDERLESS,
                                         &g_window, &g_renderer),
-            "Window and renderer creation failed", return 1);
+            "Window and renderer creation failed");
 
   bool running = true;
   SDL_Event event;
