@@ -1,5 +1,3 @@
-#include "SDL3/SDL_rect.h"
-#include "SDL3/SDL_render.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,11 +22,19 @@ constexpr SDL_Color BORDER_COLOR = {100, 100, 100, 255};
 
 // constexpr
 
+#define WITH_BORDER
+#define WITH_GRID
+
 #define SDL_CHECK(call, msg, ret)                                              \
   if (!(call)) {                                                               \
     fprintf(stderr, "%s: %s\n", msg, SDL_GetError());                          \
     ret;                                                                       \
   }
+
+#ifdef WITH_GRID
+#define WITH_HORIZONTAL_LINES
+#define WITH_VERTICAL_LINES
+#endif
 
 static void cleanup(void) {
   if (g_renderer != nullptr) {
@@ -133,16 +139,28 @@ void draw(unsigned int rows, unsigned int cols) {
 
   SDL_GetWindowSize(g_window, &x2, &y2);
 
+#ifdef WITH_BORDER
   SDL_SetRenderDrawColorSimple(g_renderer, BORDER_COLOR);
   SDL_RenderClear(g_renderer);
 
-  SDL_SetRenderClipRect(g_renderer,
-                        &(SDL_Rect){.x = x1 + BORDER_WIDTH,
-                                    .y = y1 + BORDER_WIDTH,
-                                    .w = x2 - BORDER_WIDTH - BORDER_WIDTH,
-                                    .h = y2 - BORDER_WIDTH - BORDER_WIDTH});
+  x1 += BORDER_WIDTH;
+  y1 += BORDER_WIDTH;
+  x2 -= BORDER_WIDTH;
+  y2 -= BORDER_WIDTH;
+
+  SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){x1, y1, x2 - x1, y2 - y1});
   SDL_SetRenderDrawColorSimple(g_renderer, BACKGROUND_COLOR);
   SDL_RenderFillRect(g_renderer, &(SDL_FRect){x1, y1, x2, y2});
+#else
+  SDL_SetRenderDrawColorSimple(g_renderer, BACKGROUND_COLOR);
+  SDL_RenderClear(g_renderer);
+#endif
+
+#ifdef WITH_HORIZONTAL_LINES
+#endif
+
+#ifdef WITH_VERTICAL_LINES
+#endif
 
   SDL_RenderPresent(g_renderer);
 }
