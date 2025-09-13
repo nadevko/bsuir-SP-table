@@ -37,7 +37,6 @@ void draw() {
   w -= x + BORDER_WIDTH;
   h -= y + BORDER_WIDTH;
 
-  SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){x, y, w, h});
   SDL_SetRenderDrawColour(g_renderer, GRID_BACKGROUND_COLOUR);
   SDL_RenderFillRect(g_renderer, &(SDL_FRect){x, y, w, h});
 #else
@@ -48,7 +47,33 @@ void draw() {
   float cell_h = (h - (rows - 1) * GRID_LINE_WIDTH) / rows;
   float cell_w = (w - (cols - 1) * GRID_LINE_WIDTH) / cols;
 
+#ifdef WITH_COLUMN_TITLE
+  float cell_x = x;
+  int length = COLUMN_TITLE_TEXT_BASE_LENGTH + 1;
+
+  for (int col = 1; col <= cols; col++) {
+    char buffer[(col % 10 == 0 ? ++length : length) + 1];
+    snprintf(buffer, sizeof(buffer), COLUMN_TITLE_TEXT_LABEL, col);
+
+    SDL_Surface *labelSurface =
+        TTF_RenderText_LCD(g_font, buffer, length, COLUMN_TITLE_TEXT_COLOUR,
+                           GRID_BACKGROUND_COLOUR);
+    SDL_Texture *labelTexture =
+        SDL_CreateTextureFromSurface(g_renderer, labelSurface);
+
+    SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){cell_x, y, cell_w, cell_h});
+    SDL_RenderTexture(
+        g_renderer, labelTexture, nullptr,
+        &(SDL_FRect){cell_x, y, labelSurface->w, labelSurface->h});
+
+    SDL_DestroySurface(labelSurface);
+    SDL_DestroyTexture(labelTexture);
+    cell_x += cell_w + GRID_LINE_WIDTH;
+  }
+#endif
+
 #ifdef WITH_GRID
+  SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){x, y, w, h});
   SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
 
   int count = rows + cols - 2;
@@ -57,14 +82,14 @@ void draw() {
 
   SDL_FRect grid_line_row = {x, y + cell_h, w, GRID_LINE_WIDTH};
 
-  for (int i = 1; i < rows; i++) {
+  for (int row = 1; row < rows; row++) {
     rects[idx++] = grid_line_row;
     grid_line_row.y += cell_h + GRID_LINE_WIDTH;
   }
 
   SDL_FRect grid_line_col = {x + cell_w, y, GRID_LINE_WIDTH, h};
 
-  for (int i = 1; i < cols; i++) {
+  for (int col = 1; col < cols; col++) {
     rects[idx++] = grid_line_col;
     grid_line_col.x += cell_w + GRID_LINE_WIDTH;
   }
@@ -75,38 +100,6 @@ void draw() {
 
   SDL_RenderPresent(g_renderer);
 }
-
-// #ifdef WITH_COLUMN_TITLE
-//   float cell_x = x - GRID_LINE_WIDTH;
-//   float cell_y = y;
-//   int length = COLUMN_TITLE_TEXT_BASE_LENGTH + 1;
-
-//   for (int col = 0; col < cols; cell_x += cell_w) {
-//     char buffer[(col % 10 == 9 ? ++length : length) + 1];
-//     snprintf(buffer, sizeof(buffer), COLUMN_TITLE_TEXT_LABEL, ++col);
-
-//     SDL_Surface *labelSurface =
-//         TTF_RenderText_LCD(g_font, buffer, length, COLUMN_TITLE_TEXT_COLOUR,
-//                            GRID_BACKGROUND_COLOUR);
-
-//     SDL_Texture *labelTexture =
-//         SDL_CreateTextureFromSurface(g_renderer, labelSurface);
-
-//     SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){cell_x + GRID_LINE_WIDTH,
-//                                                   cell_y, cell_w - 99,
-//                                                   cell_h});
-
-//     SDL_RenderTexture(
-//         g_renderer, labelTexture, nullptr,
-//         &(SDL_FRect){cell_x + GRID_LINE_WIDTH, y, cell_w, cell_h});
-//     SDL_DestroySurface(labelSurface);
-//     SDL_DestroyTexture(labelTexture);
-//   }
-// #endif
-
-// SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){x, y, w, h});
-// SDL_SetRenderDrawColour(g_renderer, (SDL_Color){0, 0, 0, 255});
-// SDL_RenderFillRect(g_renderer, &(SDL_FRect){0, 0, 99999, 99999});
 
 int main(int argc, char *argv[]) {
   if (argc == 3) {
@@ -149,7 +142,6 @@ int main(int argc, char *argv[]) {
             "Failed to find font file");
 
   g_font = TTF_OpenFont((const char *)file, COLUMN_TITLE_TEXT_SIZE);
-  TTF_SetFontHinting(g_font, COLUMN_TITLE_TEXT_HINTING);
 
   FcPatternDestroy(pattern);
   FcPatternDestroy(match);
