@@ -21,6 +21,7 @@
 #define GRID_LINE_WIDTH (float)BORDER_WIDTH
 
 #define WITH_COLUMN_TITLE
+#define WITH_FONTCONFIG
 
 #define COLUMN_TITLE_TEXT_LABEL "Column %i"
 #define COLUMN_TITLE_TEXT_NAME "Ubuntu Mono"

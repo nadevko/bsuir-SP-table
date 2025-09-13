@@ -131,8 +131,8 @@ int main(int argc, char *argv[]) {
   SDL_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL initialisation failed");
 
 #ifdef WITH_COLUMN_TITLE
-
   SDL_CHECK(TTF_Init(), "SDL-ttf initialisation failed");
+#ifdef WITH_FONTCONFIG
   FcConfig *fontconfig;
 
   ANY_CHECK(fontconfig = FcInitLoadConfigAndFonts(),
@@ -159,6 +159,9 @@ int main(int argc, char *argv[]) {
   FcPatternDestroy(pattern);
   FcPatternDestroy(match);
   FcConfigDestroy(fontconfig);
+#else
+  g_font = TTF_OpenFont(COLUMN_TITLE_TEXT_NAME, COLUMN_TITLE_TEXT_SIZE);
+#endif
 #endif
 
   SDL_CHECK(SDL_CreateWindowAndRenderer("Grid Example", 300, 480,
