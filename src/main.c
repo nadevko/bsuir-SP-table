@@ -52,22 +52,34 @@ void draw() {
   int length = COLUMN_TITLE_TEXT_BASE_LENGTH + 1;
 
   for (int col = 1; col <= cols; col++) {
+    float padding_x = 0, padding_y = 0;
     char buffer[(col % 10 == 0 ? ++length : length) + 1];
     snprintf(buffer, sizeof(buffer), COLUMN_TITLE_TEXT_LABEL, col);
 
-    SDL_Surface *labelSurface =
+    SDL_Surface *label_surface =
         TTF_RenderText_LCD(g_font, buffer, length, COLUMN_TITLE_TEXT_COLOUR,
                            GRID_BACKGROUND_COLOUR);
-    SDL_Texture *labelTexture =
-        SDL_CreateTextureFromSurface(g_renderer, labelSurface);
+    SDL_Texture *label_texture =
+        SDL_CreateTextureFromSurface(g_renderer, label_surface);
+
+#if COLUMN_TITLE_TEXT_POSITION_HORIZONTAL == CENTER
+    padding_x = (cell_w - label_surface->w) / 2;
+#elif COLUMN_TITLE_TEXT_POSITION_HORIZONTAL == RIGHT
+    padding_x = cell_w - labelSurface->w;
+#endif
+#if COLUMN_TITLE_TEXT_POSITION_VERTICAL == CENTER
+    padding_y = (cell_h - label_surface->h) / 2;
+#elif COLUMN_TITLE_TEXT_POSITION_VERTICAL == BOTTOM
+    padding_y = cell_h - labelSurface->h;
+#endif
 
     SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){cell_x, y, cell_w, cell_h});
-    SDL_RenderTexture(
-        g_renderer, labelTexture, nullptr,
-        &(SDL_FRect){cell_x, y, labelSurface->w, labelSurface->h});
+    SDL_RenderTexture(g_renderer, label_texture, nullptr,
+                      &(SDL_FRect){cell_x + padding_x, y + padding_y,
+                                   label_surface->w, label_surface->h});
 
-    SDL_DestroySurface(labelSurface);
-    SDL_DestroyTexture(labelTexture);
+    SDL_DestroySurface(label_surface);
+    SDL_DestroyTexture(label_texture);
     cell_x += cell_w + GRID_LINE_WIDTH;
   }
 #endif
