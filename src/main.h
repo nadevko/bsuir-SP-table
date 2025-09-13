@@ -1,5 +1,5 @@
-#ifndef _IS_LOADED_SRC_MAIN_H
-#define _IS_LOADED_SRC_MAIN_H
+#ifndef _IS_LOADED__MAIN_H_
+#define _IS_LOADED__MAIN_H_
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <fontconfig/fontconfig.h>
@@ -23,7 +23,6 @@
 #define WITH_COLUMN_TITLE
 
 #define COLUMN_TITLE_TEXT_LABEL "Column %i"
-#define COLUMN_TITLE_TEXT_BASE_LENGTH 7
 #define COLUMN_TITLE_TEXT_NAME "Ubuntu Mono"
 #define COLUMN_TITLE_TEXT_SIZE 32.0
 #define COLUMN_TITLE_TEXT_POSITION_HORIZONTAL CENTER // LEFT || CENTER || RIGHT
@@ -43,8 +42,6 @@
     fprintf(stderr, "%s: %s\n", msg, SDL_GetError());                          \
     return 1;                                                                  \
   }
-
-#define GRID_LINE_HALF_WIDTH GRID_LINE_WIDTH / 2
 
 static void cleanup(void);
 bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color);

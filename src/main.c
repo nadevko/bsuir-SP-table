@@ -1,5 +1,4 @@
 #include "main.h"
-#include <SDL3_ttf/SDL_ttf.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -49,7 +48,8 @@ void draw() {
 
 #ifdef WITH_COLUMN_TITLE
   float cell_x = x;
-  int length = COLUMN_TITLE_TEXT_BASE_LENGTH + 1;
+  [[gnu::const]] auto base_length = strlen(COLUMN_TITLE_TEXT_LABEL) - 1;
+  int length = base_length;
 
   for (int col = 1; col <= cols; col++) {
     float padding_x = 0, padding_y = 0;
@@ -129,9 +129,10 @@ int main(int argc, char *argv[]) {
   atexit(cleanup);
 
   SDL_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL initialisation failed");
-  SDL_CHECK(TTF_Init(), "SDL-ttf initialisation failed");
 
 #ifdef WITH_COLUMN_TITLE
+
+  SDL_CHECK(TTF_Init(), "SDL-ttf initialisation failed");
   FcConfig *fontconfig;
 
   ANY_CHECK(fontconfig = FcInitLoadConfigAndFonts(),
