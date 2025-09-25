@@ -267,7 +267,7 @@ void draw(void) {
       padding_y = cell_h - text_h - CELL_PADDING;
 #endif
 
-      SDL_RenderTexture(g_renderer, label_texture, nullptr,
+      SDL_RenderTexture(g_renderer, label_texture, NULL,
                         &(SDL_FRect){cell_x + padding_x, cell_y + padding_y,
                                      (float)text_w, (float)text_h});
 
@@ -276,7 +276,7 @@ void draw(void) {
     }
   }
 
-  SDL_SetRenderClipRect(g_renderer, nullptr);
+  SDL_SetRenderClipRect(g_renderer, NULL);
   SDL_RenderPresent(g_renderer);
 
   free(col_left);
@@ -319,7 +319,7 @@ int main(int argc, char *argv[]) {
   ANY_CHECK(match = FcFontMatch(fontconfig, pattern, &result),
             "Failed to resolve font");
 
-  FcChar8 *file = nullptr;
+  FcChar8 *file = NULL;
   ANY_CHECK(FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch,
             "Failed to find font file");
 
@@ -376,23 +376,36 @@ int main(int argc, char *argv[]) {
         running = false;
         break;
       case SDLK_UP:
-        g_offset_y = SDL_max(0.0f, g_offset_y - SCROLL_SPEED);
+        g_offset_y +=
+            (NATURAL_SCROLL ? SCROLL_SPEED
+                            : -SCROLL_SPEED); // Up: increase offset (natural),
+                                              // decrease (traditional)
         break;
       case SDLK_DOWN:
-        g_offset_y += SCROLL_SPEED;
+        g_offset_y +=
+            (NATURAL_SCROLL ? -SCROLL_SPEED
+                            : SCROLL_SPEED); // Down: decrease offset (natural),
+                                             // increase (traditional)
         break;
       case SDLK_LEFT:
-        g_offset_x = SDL_max(0.0f, g_offset_x - SCROLL_SPEED);
+        g_offset_x += (NATURAL_SCROLL
+                           ? SCROLL_SPEED
+                           : -SCROLL_SPEED); // Left: increase offset (natural),
+                                             // decrease (traditional)
         break;
       case SDLK_RIGHT:
-        g_offset_x += SCROLL_SPEED;
+        g_offset_x += (NATURAL_SCROLL
+                           ? -SCROLL_SPEED
+                           : SCROLL_SPEED); // Right: decrease offset (natural),
+                                            // increase (traditional)
         break;
       }
       break;
-    case SDL_EVENT_MOUSE_WHEEL:
-      g_offset_y += event.wheel.y * SCROLL_SPEED;
-      g_offset_x += event.wheel.x * SCROLL_SPEED;
-      break;
+    case SDL_EVENT_MOUSE_WHEEL: {
+      float scroll_factor = NATURAL_SCROLL ? 1.0f : -1.0f;
+      g_offset_y += scroll_factor * event.wheel.y * SCROLL_SPEED;
+      g_offset_x += -scroll_factor * event.wheel.x * SCROLL_SPEED;
+    } break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
       if (event.button.button == SDL_BUTTON_LEFT) {
         int mx = event.button.x;
@@ -451,9 +464,11 @@ int main(int argc, char *argv[]) {
         float view_h_local = win_h_local - 2 * border_local;
         float content_h_local =
             view_h_local - (need_horz ? SCROLLBAR_WIDTH : 0);
-        float dy = event.motion.yrel; // Use relative motion for smoother drag
-        g_offset_y = SDL_clamp(g_drag_start_offset + dy, 0.0f,
-                               total_grid_h - content_h_local);
+        float dy = event.motion.yrel;
+        float scroll_factor = NATURAL_SCROLL ? -1.0f : 1.0f;
+        float new_offset_y = g_drag_start_offset + scroll_factor * dy;
+        g_offset_y =
+            SDL_clamp(new_offset_y, 0.0f, total_grid_h - content_h_local);
       } else if (g_dragging_horz) {
         int win_w_local;
         SDL_GetWindowSize(g_window, &win_w_local, NULL);
@@ -466,8 +481,10 @@ int main(int argc, char *argv[]) {
         float content_w_local =
             view_w_local - (need_vert ? SCROLLBAR_WIDTH : 0);
         float dx = event.motion.xrel;
-        g_offset_x = SDL_clamp(g_drag_start_offset + dx, 0.0f,
-                               total_grid_w - content_w_local);
+        float scroll_factor = NATURAL_SCROLL ? -1.0f : 1.0f;
+        float new_offset_x = g_drag_start_offset + scroll_factor * dx;
+        g_offset_x =
+            SDL_clamp(new_offset_x, 0.0f, total_grid_w - content_w_local);
       }
       break;
     case SDL_EVENT_MOUSE_BUTTON_UP:
