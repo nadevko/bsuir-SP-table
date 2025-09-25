@@ -65,12 +65,12 @@ void draw() {
 #if COLUMN_TITLE_TEXT_POSITION_HORIZONTAL == CENTER
     padding_x = (cell_w - label_surface->w) / 2;
 #elif COLUMN_TITLE_TEXT_POSITION_HORIZONTAL == RIGHT
-    padding_x = cell_w - labelSurface->w;
+    padding_x = cell_w - label_surface->w;
 #endif
 #if COLUMN_TITLE_TEXT_POSITION_VERTICAL == CENTER
     padding_y = (cell_h - label_surface->h) / 2;
 #elif COLUMN_TITLE_TEXT_POSITION_VERTICAL == BOTTOM
-    padding_y = cell_h - labelSurface->h;
+    padding_y = cell_h - label_surface->h;
 #endif
 
     SDL_SetRenderClipRect(g_renderer, &(SDL_Rect){cell_x, y, cell_w, cell_h});
