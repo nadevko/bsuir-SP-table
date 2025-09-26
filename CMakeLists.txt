@@ -28,7 +28,7 @@ target_include_directories(
                    ${Fontconfig_INCLUDE_DIRS})
 
 target_link_libraries(bsuir-sp PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf
-                                       Fontconfig::Fontconfig m)
+                                       Fontconfig::Fontconfig)
 
 install(TARGETS bsuir-sp RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
 
