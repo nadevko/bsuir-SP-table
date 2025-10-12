@@ -12,28 +12,39 @@ find_package(Fontconfig REQUIRED)
 if(NOT SDL3_FOUND)
   message(FATAL_ERROR "SDL3 not found. Please ensure SDL3 is installed.")
 endif()
+
 if(NOT SDL3_ttf_FOUND)
-  message(
-    FATAL_ERROR "SDL3_ttf not found. Please ensure SDL3_ttf is installed.")
+  message(FATAL_ERROR "SDL3_ttf not found. Please ensure SDL3_ttf is installed.")
 endif()
+
 if(NOT Fontconfig_FOUND)
-  message(
-    FATAL_ERROR "Fontconfig not found. Please ensure Fontconfig is installed.")
+  message(FATAL_ERROR "Fontconfig not found. Please ensure Fontconfig is installed.")
 endif()
 
-add_executable(bsuir-sp src/main.c src/main.h)
+add_executable(bsuir-sp
+  src/main.c
+  src/globals.c
+  src/utils.c
+  src/grid.c
+  src/fs.c
+)
 
-target_include_directories(
-  bsuir-sp PRIVATE ${SDL3_INCLUDE_DIRS} ${SDL3_ttf_INCLUDE_DIRS}
-                   ${Fontconfig_INCLUDE_DIRS})
+target_include_directories(bsuir-sp PRIVATE
+  ${SDL3_INCLUDE_DIRS}
+  ${SDL3_ttf_INCLUDE_DIRS}
+  ${Fontconfig_INCLUDE_DIRS}
+  ${CMAKE_SOURCE_DIR}/include
+)
 
-target_link_libraries(bsuir-sp PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf
-                                       Fontconfig::Fontconfig)
+target_link_libraries(bsuir-sp PRIVATE
+  SDL3::SDL3
+  SDL3_ttf::SDL3_ttf
+  Fontconfig::Fontconfig
+)
+
+# default install dir to build/install if user didn't set it
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Install path prefix" FORCE)
+endif()
 
 install(TARGETS bsuir-sp RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
-
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX
-      "${CMAKE_BINARY_DIR}/install"
-      CACHE PATH "Install path prefix" FORCE)
-endif()
