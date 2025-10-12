@@ -25,10 +25,6 @@
 #define SMOOTH_SCROLL 1
 #endif
 
-/* New: if 1, horizontal separators will span the entire content width
- * (content_w) even if sa->total_grid_w < content_w. The space to the right of
- * the real columns becomes a single empty column. Default: enabled (1).
- */
 #ifndef FULL_WIDTH_HORIZ_LINES
 #define FULL_WIDTH_HORIZ_LINES 1
 #endif
@@ -61,6 +57,19 @@
 
 #ifndef BATCH_SIZE
 #define BATCH_SIZE 100
+#endif
+
+/* Permissions format */
+#define PERM_SYMBOLIC 0
+#define PERM_NUMERIC 1
+#ifndef PERM_FORMAT
+#define PERM_FORMAT PERM_SYMBOLIC
+#endif
+
+/* Show file type as first character in symbolic mode (e.g., 'd' for directory)
+ */
+#ifndef SHOW_FILE_TYPE
+#define SHOW_FILE_TYPE 0
 #endif
 
 /* --- remaining original config --- */
@@ -132,7 +141,6 @@ typedef struct SizeAlloc {
   float content_h;
   int *col_widths;
   float *col_left;
-  /* new: actual row height used for layout/drawing */
   float row_height;
 } SizeAlloc;
 
