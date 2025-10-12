@@ -198,6 +198,12 @@ void log_fs_error(const char *fmt, ...);
 /* FS thread functions (defined in fs.c) */
 int traverse_fs(void *arg);
 
+/* Event handling (defined in events.c) */
+bool handle_events(SDL_Event *event, int win_w_local, int win_h_local);
+
+/* Scroll handling (defined in scroll.c) */
+void update_scroll(void);
+
 /* main */
 int main(int argc, char *argv[]);
 
