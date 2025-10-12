@@ -2,6 +2,7 @@
 #define _IS_LOADED__MAIN_H_
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_thread.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <fontconfig/fontconfig.h>
 #include <stdbool.h>
@@ -56,6 +57,10 @@
 
 #ifndef ERROR_LOG_FALLBACK
 #define ERROR_LOG_FALLBACK "/dev/stderr"
+#endif
+
+#ifndef BATCH_SIZE
+#define BATCH_SIZE 100
 #endif
 
 /* --- remaining original config --- */
@@ -166,6 +171,18 @@ extern FILE *g_log_file;
 extern float g_scroll_target_x;
 extern float g_scroll_target_y;
 
+/* Mutex for grid access */
+extern SDL_Mutex *g_grid_mutex;
+
+/* Max column widths */
+extern int *g_max_col_widths;
+
+/* FS traversal flag */
+extern bool g_fs_traversing;
+
+/* Stop flag for traversal */
+extern volatile bool g_stop;
+
 /* Prototypes */
 void cleanup(void);
 bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color);
@@ -173,14 +190,13 @@ void set_cell(int row, int col, const char *text);
 SizeAlloc sizeAllocate(int win_w, int win_h);
 void draw_with_alloc(const SizeAlloc *sa);
 
-/* File system helpers */
-int count_files(const char *dir_path);
-void populate_files(const char *dir_path, int start_row);
-
 /* Logging helpers */
 int init_fs_log(void); /* returns 0 on success, 1 on fallback used */
 void close_fs_log(void);
 void log_fs_error(const char *fmt, ...);
+
+/* FS thread functions (defined in fs.c) */
+int traverse_fs(void *arg);
 
 /* main */
 int main(int argc, char *argv[]);

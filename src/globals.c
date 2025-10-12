@@ -36,3 +36,65 @@ FILE *g_log_file = NULL;
 /* Smooth scroll targets (mouse wheel / touchpad) */
 float g_scroll_target_x = 0.0f;
 float g_scroll_target_y = 0.0f;
+
+/* Mutex (initialized in main) */
+SDL_Mutex *g_grid_mutex = NULL;
+
+/* Max column widths (initialized in main) */
+int *g_max_col_widths = NULL;
+
+/* FS traversing flag */
+bool g_fs_traversing = false;
+
+/* Stop flag */
+volatile bool g_stop = false;
+
+void cleanup(void) {
+  if (g_grid_mutex) {
+    SDL_DestroyMutex(g_grid_mutex);
+    g_grid_mutex = NULL;
+  }
+
+  if (g_max_col_widths) {
+    free(g_max_col_widths);
+    g_max_col_widths = NULL;
+  }
+
+  if (g_grid) {
+    for (int r = 0; r < g_rows; r++) {
+      if (g_grid[r]) {
+        for (int c = 0; c < g_cols; c++) {
+          if (g_grid[r][c].text) {
+            free(g_grid[r][c].text);
+          }
+        }
+        free(g_grid[r]);
+      }
+    }
+    free(g_grid);
+    g_grid = NULL;
+  }
+
+  if (g_font) {
+    TTF_CloseFont(g_font);
+    g_font = NULL;
+  }
+
+  if (g_renderer) {
+    SDL_DestroyRenderer(g_renderer);
+    g_renderer = NULL;
+  }
+
+  if (g_window) {
+    SDL_DestroyWindow(g_window);
+    g_window = NULL;
+  }
+
+  if (g_log_file) {
+    close_fs_log();
+    g_log_file = NULL;
+  }
+
+  TTF_Quit();
+  SDL_Quit();
+}

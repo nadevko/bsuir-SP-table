@@ -6,7 +6,8 @@
 #include <string.h>
 #include <unistd.h>
 
-int main(int argc, char *argv[]) {
+    int
+    main(int argc, char *argv[]) {
   char *dir_path = NULL;
   if (argc == 2) {
     dir_path = argv[1];
@@ -25,19 +26,9 @@ int main(int argc, char *argv[]) {
   /* Initialize filesystem error log early */
   init_fs_log();
 
-  /* Count files in directory to set row count */
-  int file_count = count_files(dir_path);
-
-  /* Set grid dimensions (add 1 row for headers) */
-  g_rows = file_count + 1; // +1 for header row
-  g_cols = DEFAULT_COLS;   // 4 columns: File, Size (bytes), Date, Permissions
-
-  if (file_count == 0) {
-    log_fs_error("No files found in directory %s", dir_path);
-    if (argc == 1)
-      free(dir_path);
-    return 1;
-  }
+  /* Set grid dimensions (start with 1 row for headers) */
+  g_cols = DEFAULT_COLS; // 4 columns: File, Size (bytes), Date, Permissions
+  g_rows = 1;
 
   atexit(cleanup);
 
@@ -108,8 +99,40 @@ int main(int argc, char *argv[]) {
   set_cell(0, 2, "Date");
   set_cell(0, 3, "Permissions");
 
-  /* Populate grid with file information */
-  populate_files(dir_path, 1);
+  /* Initialize max column widths from header */
+  g_max_col_widths = calloc(g_cols, sizeof(int));
+  if (!g_max_col_widths) {
+    log_fs_error("Failed to allocate memory for max_col_widths");
+    if (argc == 1)
+      free(dir_path);
+    return 1;
+  }
+  for (int c = 0; c < g_cols; c++) {
+    g_max_col_widths[c] = g_grid[0][c].text_width;
+  }
+
+  /* Create mutex for grid access */
+  g_grid_mutex = SDL_CreateMutex();
+  if (!g_grid_mutex) {
+    log_fs_error("Failed to create mutex: %s", SDL_GetError());
+    if (argc == 1)
+      free(dir_path);
+    return 1;
+  }
+
+  /* Start filesystem traversal thread */
+  char *thread_dir = strdup(dir_path);
+  g_fs_traversing = true;
+  g_stop = false;
+  SDL_Thread *fs_thread =
+      SDL_CreateThread(traverse_fs, "FS Traversal", thread_dir);
+  if (!fs_thread) {
+    log_fs_error("Failed to create thread: %s", SDL_GetError());
+    free(thread_dir);
+    if (argc == 1)
+      free(dir_path);
+    return 1;
+  }
 
   if (argc == 1)
     free(dir_path);
@@ -141,6 +164,7 @@ int main(int argc, char *argv[]) {
     int win_w_local = 0, win_h_local = 0;
     SDL_GetWindowSize(g_window, &win_w_local, &win_h_local);
 
+    SDL_LockMutex(g_grid_mutex);
     SizeAlloc sa = sizeAllocate(win_w_local, win_h_local);
 
     /* Update global copies used by event handlers */
@@ -160,11 +184,17 @@ int main(int argc, char *argv[]) {
 
       case SDL_EVENT_KEY_DOWN:
         switch (event.key.key) {
-        case SDLK_ESCAPE:
-          running = false;
+        case SDLK_W:
+          if (event.key.mod & SDL_KMOD_CTRL) {
+            running = false;
+          }
+          break;
+        case SDLK_Q:
+          if (event.key.mod & SDL_KMOD_CTRL) {
+            running = false;
+          }
           break;
         case SDLK_UP:
-          /* keyboard: immediate step */
           g_offset_y += (NATURAL_SCROLL ? SCROLL_SPEED : -SCROLL_SPEED);
           g_scroll_target_y = g_offset_y;
           break;
@@ -391,10 +421,15 @@ int main(int argc, char *argv[]) {
     /* Free the arrays allocated by sizeAllocate */
     free(sa.col_widths);
     free(sa.col_left);
+    SDL_UnlockMutex(g_grid_mutex);
 
     /* Sleep a bit to cap frame rate and allow animation */
     SDL_Delay(frame_delay_ms);
   }
+
+  g_stop = true;
+
+  SDL_WaitThread(fs_thread, NULL);
 
   return 0;
 }

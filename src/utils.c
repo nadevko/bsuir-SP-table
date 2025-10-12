@@ -5,41 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Clean-up helper */
-void cleanup(void) {
-  if (g_font != NULL) {
-    TTF_CloseFont(g_font);
-    g_font = NULL;
-  }
-
-  if (g_grid != NULL) {
-    for (int r = 0; r < g_rows; r++) {
-      for (int c = 0; c < g_cols; c++) {
-        free(g_grid[r][c].text);
-      }
-      free(g_grid[r]);
-    }
-    free(g_grid);
-    g_grid = NULL;
-  }
-
-  if (g_renderer != NULL) {
-    SDL_DestroyRenderer(g_renderer);
-    g_renderer = NULL;
-  }
-  if (g_window != NULL) {
-    SDL_DestroyWindow(g_window);
-    g_window = NULL;
-  }
-
-  /* close log file if it's not stderr */
-  close_fs_log();
-
-  SDL_Quit();
-}
-
-/* Utility wrapper (keeps your naming) */
-bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color) {
+    /* Utility wrapper (keeps your naming) */
+    bool
+    SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color) {
   return SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a) ==
          0;
 }

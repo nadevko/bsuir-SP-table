@@ -7,8 +7,8 @@
 /*
  * sizeAllocate:
  *  - compute column widths, whether scrollbars are needed, content sizes
- *  - if SNAP_VIEW_TO_ROWS enabled, adjust row_height so visible area divides
- * exactly into integer number of rows (no half-row at top/end)
+ *  - if SNAP_VIEW_TO_ROWS enabled, adjust row_height so visible area
+ * divides exactly into integer number of rows (no half-row at top/end)
  */
 SizeAlloc sizeAllocate(int win_w, int win_h) {
   SizeAlloc sa;
@@ -38,24 +38,14 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
   float min_cell_h = (float)font_height + 2 * CELL_PADDING;
   float line_w = GRID_LINE_WIDTH;
 
-  /* Compute max text width per column */
-  int *max_col_w = calloc(g_cols, sizeof(int));
-  for (int c = 0; c < g_cols; c++)
-    for (int r = 0; r < g_rows; r++)
-      if (g_grid[r][c].text && g_grid[r][c].text[0] != '\0')
-        if (g_grid[r][c].text_width > max_col_w[c])
-          max_col_w[c] = g_grid[r][c].text_width;
-
-  /* Compute column widths */
+  /* Compute column widths from cached max widths */
   sa.col_widths = malloc(g_cols * sizeof(int));
   sa.total_grid_w = 0.0f;
   for (int c = 0; c < g_cols; c++) {
-    sa.col_widths[c] = max_col_w[c] + 2 * CELL_PADDING;
+    sa.col_widths[c] = g_max_col_widths[c] + 2 * CELL_PADDING;
     sa.total_grid_w += sa.col_widths[c];
   }
   sa.total_grid_w += (g_cols > 0 ? (g_cols - 1) * line_w : 0.0f);
-
-  free(max_col_w);
 
   /* We'll iteratively compute need_horz/need_vert; row height may be adjusted
      after we know content area (which depends on scrollbars) so we iterate
