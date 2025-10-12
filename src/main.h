@@ -8,8 +8,59 @@
 
 /* --- CONFIG --- */
 
-#define WITH_BORDER
+#ifndef GRID_DRAWING_STRATEGY
+#define GRID_DRAWING_STRATEGY 1
+#endif
 
+#ifndef DRAW_EMPTY_ROWS
+#define DRAW_EMPTY_ROWS 1
+#endif
+
+#ifndef SNAP_VIEW_TO_ROWS
+#define SNAP_VIEW_TO_ROWS 1
+#endif
+
+#ifndef SMOOTH_SCROLL
+#define SMOOTH_SCROLL 1
+#endif
+
+/* New: if 1, horizontal separators will span the entire content width
+ * (content_w) even if sa->total_grid_w < content_w. The space to the right of
+ * the real columns becomes a single empty column. Default: enabled (1).
+ */
+#ifndef FULL_WIDTH_HORIZ_LINES
+#define FULL_WIDTH_HORIZ_LINES 1
+#endif
+
+/* Symlink behaviour */
+#define SYMLINK_IGNORE 0
+#define SYMLINK_LIST_SKIP_CONTENT 1
+#define SYMLINK_LIST_RECURSE 2
+
+#ifndef SYMLINK_BEHAVIOUR
+#define SYMLINK_BEHAVIOUR SYMLINK_IGNORE
+#endif
+
+#ifndef SYMLINK_RECURSE_MAX_DEPTH
+#define SYMLINK_RECURSE_MAX_DEPTH 32
+#endif
+
+/* Logging defaults */
+#ifndef ERROR_LOG_PATH
+#define ERROR_LOG_PATH "/var/log/bsuir-sp.log"
+#endif
+
+#ifndef ERROR_LOG_APPEND
+#define ERROR_LOG_APPEND 0
+#endif
+
+#ifndef ERROR_LOG_FALLBACK
+#define ERROR_LOG_FALLBACK "/dev/stderr"
+#endif
+
+/* --- remaining original config --- */
+
+#define WITH_BORDER
 #define BORDER_COLOUR (SDL_Color){100, 100, 100, 255}
 #define BORDER_WIDTH 2
 
@@ -76,6 +127,8 @@ typedef struct SizeAlloc {
   float content_h;
   int *col_widths;
   float *col_left;
+  /* new: actual row height used for layout/drawing */
+  float row_height;
 } SizeAlloc;
 
 /* Globals (defined in src/globals.c) */
@@ -106,6 +159,13 @@ extern float g_view_y;
 extern float g_view_w;
 extern float g_view_h;
 
+/* Logging file pointer (defined in globals.c) */
+extern FILE *g_log_file;
+
+/* Smooth scroll targets (defined in globals.c) */
+extern float g_scroll_target_x;
+extern float g_scroll_target_y;
+
 /* Prototypes */
 void cleanup(void);
 bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color);
@@ -116,6 +176,11 @@ void draw_with_alloc(const SizeAlloc *sa);
 /* File system helpers */
 int count_files(const char *dir_path);
 void populate_files(const char *dir_path, int start_row);
+
+/* Logging helpers */
+int init_fs_log(void); /* returns 0 on success, 1 on fallback used */
+void close_fs_log(void);
+void log_fs_error(const char *fmt, ...);
 
 /* main */
 int main(int argc, char *argv[]);

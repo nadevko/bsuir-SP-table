@@ -1,15 +1,14 @@
 #include "main.h"
 #include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 /*
  * sizeAllocate:
- *  - given the current window size and the global grid/font state,
- *    compute column widths, column left offsets, total grid width/height,
- *    whether horizontal/vertical scrollbars are needed, and content sizes.
- *  - returns a SizeAlloc struct; col_widths and col_left are malloc'ed and
- *    must be freed by the caller (free(sa.col_widths); free(sa.col_left);).
+ *  - compute column widths, whether scrollbars are needed, content sizes
+ *  - if SNAP_VIEW_TO_ROWS enabled, adjust row_height so visible area divides
+ * exactly into integer number of rows (no half-row at top/end)
  */
 SizeAlloc sizeAllocate(int win_w, int win_h) {
   SizeAlloc sa;
@@ -21,6 +20,7 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
   sa.total_grid_h = 0.0f;
   sa.content_w = 0.0f;
   sa.content_h = 0.0f;
+  sa.row_height = 0.0f;
 
 #ifdef WITH_BORDER
   float border = BORDER_WIDTH;
@@ -33,13 +33,10 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
   float view_w = win_w - 2 * border;
   float view_h = win_h - 2 * border;
 
+  /* minimal row height determined by font + padding */
   int font_height = TTF_GetFontHeight(g_font);
-  float cell_h = font_height + 2 * CELL_PADDING;
+  float min_cell_h = (float)font_height + 2 * CELL_PADDING;
   float line_w = GRID_LINE_WIDTH;
-
-  /* total vertical size of grid (all rows + separators) */
-  sa.total_grid_h =
-      g_rows * cell_h + (g_rows > 0 ? (g_rows - 1) * line_w : 0.0f);
 
   /* Compute max text width per column */
   int *max_col_w = calloc(g_cols, sizeof(int));
@@ -60,33 +57,83 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
 
   free(max_col_w);
 
-  /* Interdependency between scrollbars: iteratively compute need_horz/need_vert
-   */
+  /* We'll iteratively compute need_horz/need_vert; row height may be adjusted
+     after we know content area (which depends on scrollbars) so we iterate
+     a few times to converge. */
+  float row_h = min_cell_h;
+  float total_grid_h =
+      g_rows * row_h + (g_rows > 0 ? (g_rows - 1) * line_w : 0.0f);
+
   bool need_horz = false;
   bool need_vert = false;
-  bool changed = true;
-  while (changed) {
-    changed = false;
-    float temp_w = view_w - (need_vert ? SCROLLBAR_WIDTH : 0.0f);
-    float temp_h = view_h - (need_horz ? SCROLLBAR_WIDTH : 0.0f);
-    bool new_horz = sa.total_grid_w > temp_w;
-    bool new_vert = sa.total_grid_h > temp_h;
-    if (new_horz != need_horz) {
-      need_horz = new_horz;
-      changed = true;
+
+  for (int iter = 0; iter < 6; iter++) {
+    /* compute need_horz/need_vert using current total_grid_h */
+    bool new_h = false;
+    bool new_v = false;
+    bool changed = true;
+    float tmp_view_w = view_w;
+    float tmp_view_h = view_h;
+    /* iterative inside to account for interdependency between scrollbars */
+    while (changed) {
+      changed = false;
+      float temp_w = tmp_view_w - (new_v ? SCROLLBAR_WIDTH : 0.0f);
+      float temp_h = tmp_view_h - (new_h ? SCROLLBAR_WIDTH : 0.0f);
+      bool calc_h = sa.total_grid_w > temp_w;
+      bool calc_v = total_grid_h > temp_h;
+      if (calc_h != new_h) {
+        new_h = calc_h;
+        changed = true;
+      }
+      if (calc_v != new_v) {
+        new_v = calc_v;
+        changed = true;
+      }
     }
-    if (new_vert != need_vert) {
-      need_vert = new_vert;
-      changed = true;
+
+    need_horz = new_h;
+    need_vert = new_v;
+
+    /* compute content area with these flags */
+    sa.content_w = view_w - (need_vert ? SCROLLBAR_WIDTH : 0.0f);
+    sa.content_h = view_h - (need_horz ? SCROLLBAR_WIDTH : 0.0f);
+
+    /* If SNAP_VIEW_TO_ROWS, adjust row_h so that an integer number of rows fit
+       exactly. We need to consider separator height line_w: content_h = N *
+       cell_h + (N-1) * line_w
+       => cell_h = (content_h + line_w)/N - line_w
+       Choose N = floor((content_h + line_w) / (min_cell_h + line_w)) */
+#if SNAP_VIEW_TO_ROWS
+    if (sa.content_h > 0.0f) {
+      float denom = min_cell_h + line_w;
+      int N = (int)floorf((sa.content_h + line_w) / denom);
+      if (N < 1)
+        N = 1;
+      float candidate = (sa.content_h + line_w) / (float)N - line_w;
+      if (candidate < min_cell_h)
+        candidate = min_cell_h;
+      row_h = candidate;
+    } else {
+      row_h = min_cell_h;
     }
+#else
+    row_h = min_cell_h;
+#endif
+
+    /* recompute total_grid_h */
+    float new_total_grid_h =
+        g_rows * row_h + (g_rows > 0 ? (g_rows - 1) * line_w : 0.0f);
+    if (fabsf(new_total_grid_h - total_grid_h) < 0.5f) {
+      total_grid_h = new_total_grid_h;
+      break;
+    }
+    total_grid_h = new_total_grid_h;
   }
 
   sa.need_horz = need_horz;
   sa.need_vert = need_vert;
-
-  /* content area size after accounting for scrollbars */
-  sa.content_w = view_w - (sa.need_vert ? SCROLLBAR_WIDTH : 0.0f);
-  sa.content_h = view_h - (sa.need_horz ? SCROLLBAR_WIDTH : 0.0f);
+  sa.total_grid_h = total_grid_h;
+  sa.row_height = row_h;
 
   /* Column left positions (virtual) */
   sa.col_left = malloc(g_cols * sizeof(float));
@@ -106,10 +153,17 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
 }
 
 /* Draw the grid + scrollbars + texts using values from SizeAlloc.
- * The function does not free sa.col_widths / sa.col_left (caller frees).
+ * GRID_DRAWING_STRATEGY controls behaviour:
+ *   1 (default) - draw grid "in relation to content" (as before), but
+ *                 vertical lines limited to grid height; draw bottom line after
+ * last row. 0           - draw grid filling entire visible area, taking offsets
+ * into account.
+ *
+ * FULL_WIDTH_HORIZ_LINES (new): when GRID_DRAWING_STRATEGY == 1 and this flag
+ * is enabled, horizontal separators span content_w (full width). Also draw the
+ * right border of the real grid (so the right-side empty column is visible).
  */
 void draw_with_alloc(const SizeAlloc *sa) {
-  /* Use the global renderer and g_font. Sa contains precomputed sizes. */
   int win_w, win_h;
   SDL_GetWindowSize(g_window, &win_w, &win_h);
 
@@ -124,8 +178,8 @@ void draw_with_alloc(const SizeAlloc *sa) {
   float content_h = sa->content_h;
 
   float line_w = GRID_LINE_WIDTH;
-  int font_height = TTF_GetFontHeight(g_font);
-  float cell_h = font_height + 2 * CELL_PADDING;
+  float cell_h = sa->row_height;
+  float row_full = cell_h + line_w;
 
   /* Clamp offsets to avoid seeing outside content */
   float max_offset_x = SDL_max(0.0f, sa->total_grid_w - content_w);
@@ -155,7 +209,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
     vert_thumb_h = SDL_max(10.0f, content_h * (content_h / sa->total_grid_h));
 
-    /* Avoid division by zero if max_offset_y == 0 */
     float max_offset_y_local = SDL_max(0.0f, sa->total_grid_h - content_h);
     if (max_offset_y_local <= 0.0f) {
       vert_thumb_y = vert_bar_y;
@@ -208,25 +261,130 @@ void draw_with_alloc(const SizeAlloc *sa) {
   SDL_SetRenderClipRect(g_renderer, &clip_rect);
 
 #ifdef WITH_GRID
-  /* Collect horizontal grid lines (only visible ones) */
-  SDL_FRect *horz_rects = malloc((g_rows - 1) * sizeof(SDL_FRect));
+#if GRID_DRAWING_STRATEGY == 0
+  /* Horizontal separators tiled to fill view */
+  {
+    float offset_mod = fmodf(g_offset_y, row_full);
+    if (offset_mod < 0.0f)
+      offset_mod += row_full;
+    float first_row_top_y = view_y - offset_mod;
+    int rows_needed = (int)ceilf((content_h + offset_mod) / row_full) + 1;
+    SDL_FRect *horz_rects = malloc(rows_needed * sizeof(SDL_FRect));
+    int horz_count = 0;
+    for (int i = 0; i < rows_needed; i++) {
+      float sep_y = first_row_top_y + i * row_full + cell_h;
+      if (sep_y + line_w < view_y || sep_y > view_y + content_h)
+        continue;
+      horz_rects[horz_count++] = (SDL_FRect){view_x, sep_y, content_w, line_w};
+    }
+    if (horz_count > 0) {
+      SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
+      SDL_RenderFillRects(g_renderer, horz_rects, horz_count);
+    }
+    free(horz_rects);
+  }
+
+  /* Vertical separators: draw real ones and extend to the right repeating last
+   * column */
+  {
+    int max_v_separators = g_cols + 100;
+    SDL_FRect *vert_rects = malloc(max_v_separators * sizeof(SDL_FRect));
+    int vert_count = 0;
+
+    for (int i = 1; i < g_cols; i++) {
+      float line_x = view_x - g_offset_x + sa->col_left[i];
+      if (line_x + line_w < view_x || line_x > view_x + content_w)
+        continue;
+      vert_rects[vert_count++] = (SDL_FRect){line_x, view_y, line_w, content_h};
+    }
+
+    if (g_cols > 0) {
+      float last_col_w = sa->col_widths[g_cols - 1];
+      float current_x =
+          view_x - g_offset_x + sa->col_left[g_cols - 1] + last_col_w + line_w;
+      int guard = 0;
+      while (current_x <= view_x + content_w && guard < 1000) {
+        vert_rects[vert_count++] =
+            (SDL_FRect){current_x, view_y, line_w, content_h};
+        current_x += last_col_w + line_w;
+        guard++;
+      }
+    }
+
+    if (vert_count > 0) {
+      SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
+      SDL_RenderFillRects(g_renderer, vert_rects, vert_count);
+    }
+    free(vert_rects);
+  }
+#else
+  /* GRID_DRAWING_STRATEGY == 1 (content related) */
+  /* Horizontal separators BETWEEN rows (only those between rows) */
+  SDL_FRect *horz_rects =
+      malloc((g_rows) * sizeof(SDL_FRect)); /* +1 for bottom line */
   int horz_count = 0;
   for (int i = 1; i < g_rows; i++) {
     float line_y = view_y - g_offset_y + i * cell_h + (i - 1) * line_w;
     if (line_y >= view_y && line_y <= view_y + content_h) {
-      horz_rects[horz_count++] = (SDL_FRect){view_x, line_y, content_w, line_w};
+      /* width either full content_w (flag) or limited to grid width (old
+       * behaviour) */
+#if FULL_WIDTH_HORIZ_LINES
+      float w = content_w;
+#else
+      float w = SDL_min(content_w, sa->total_grid_w);
+#endif
+      horz_rects[horz_count++] = (SDL_FRect){view_x, line_y, w, line_w};
+    }
+  }
+  /* bottom line after last row */
+  {
+    float bottom_y = view_y - g_offset_y + sa->total_grid_h;
+    if (bottom_y >= view_y && bottom_y <= view_y + content_h) {
+#if FULL_WIDTH_HORIZ_LINES
+      float w = content_w;
+#else
+      float w = SDL_min(content_w, sa->total_grid_w);
+#endif
+      horz_rects[horz_count++] = (SDL_FRect){view_x, bottom_y, w, line_w};
     }
   }
 
-  /* Collect vertical grid lines (only visible ones) */
-  SDL_FRect *vert_rects = malloc((g_cols - 1) * sizeof(SDL_FRect));
+  /* Vertical grid lines — draw only while there is grid (visible grid height),
+     not across whole content_h when the table is small. */
+  /* compute visible grid top/bottom within content area */
+  float grid_top = view_y - g_offset_y;
+  float grid_bottom = grid_top + sa->total_grid_h;
+  float vis_top = SDL_max(view_y, grid_top);
+  float vis_bottom = SDL_min(view_y + content_h, grid_bottom);
+  float vis_grid_h = vis_bottom - vis_top;
+  if (vis_grid_h < 0.0f)
+    vis_grid_h = 0.0f;
+
+  SDL_FRect *vert_rects = malloc(
+      (g_cols + 1) * sizeof(SDL_FRect)); /* +1 for potential right border */
   int vert_count = 0;
   for (int i = 1; i < g_cols; i++) {
     float line_x = view_x - g_offset_x + sa->col_left[i];
     if (line_x >= view_x && line_x <= view_x + content_w) {
-      vert_rects[vert_count++] = (SDL_FRect){line_x, view_y, line_w, content_h};
+      if (vis_grid_h > 0.0f) {
+        vert_rects[vert_count++] =
+            (SDL_FRect){line_x, vis_top, line_w, vis_grid_h};
+      }
     }
   }
+
+  /* If FULL_WIDTH_HORIZ_LINES enabled, draw right border at end of real columns
+     so the empty column area to the right is delineated. */
+#if FULL_WIDTH_HORIZ_LINES
+  if (g_cols > 0 && vis_grid_h > 0.0f) {
+    float right_x = view_x - g_offset_x + sa->col_left[g_cols - 1] +
+                    sa->col_widths[g_cols - 1];
+    if (right_x >= view_x && right_x <= view_x + content_w) {
+      vert_rects[vert_count++] =
+          (SDL_FRect){right_x, vis_top, line_w, vis_grid_h};
+    }
+  }
+#endif
 
   if (horz_count > 0) {
     SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
@@ -236,14 +394,14 @@ void draw_with_alloc(const SizeAlloc *sa) {
     SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
     SDL_RenderFillRects(g_renderer, vert_rects, vert_count);
   }
-
   free(horz_rects);
   free(vert_rects);
 #endif
+#endif /* WITH_GRID */
 
-  /* Draw cell texts (only visible ones) */
+  /* Draw cell texts (only visible ones) -- same for both strategies */
   for (int r = 0; r < g_rows; r++) {
-    float cell_y = view_y - g_offset_y + r * (cell_h + line_w);
+    float cell_y = view_y - g_offset_y + r * row_full;
     if (cell_y + cell_h < view_y || cell_y > view_y + content_h)
       continue;
 
