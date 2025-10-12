@@ -4,6 +4,7 @@ result*/
 .cache/
 build/
 dist/
+bsuir-sp.log
 
 CMakeLists.txt.user
 CMakeCache.txt

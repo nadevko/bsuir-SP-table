@@ -44,7 +44,7 @@
 
 /* Logging defaults */
 #ifndef ERROR_LOG_PATH
-#define ERROR_LOG_PATH "/var/log/bsuir-sp.log"
+#define ERROR_LOG_PATH "./bsuir-sp.log"
 #endif
 
 #ifndef ERROR_LOG_APPEND
