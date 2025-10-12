@@ -1,4 +1,13 @@
-#include "main.h"
+#include "include/layout.h"
+#include "include/config.h"
+#include "include/globals.h"
+#include "include/events.h"
+#include "include/scroll.h"
+#include "include/grid.h"
+#include "include/fs.h"
+#include "include/utils.h"
+#include "include/main.h"
+#include <fontconfig/fontconfig.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

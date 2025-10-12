@@ -1,13 +1,13 @@
-#include "main.h"
+#include "include/utils.h"
+#include "include/globals.h"
+#include "include/config.h"
 #include <errno.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-    /* Utility wrapper (keeps your naming) */
-    bool
-    SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color) {
+/* Utility wrapper (keeps your naming) */
+bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color) {
   return SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a) ==
          0;
 }

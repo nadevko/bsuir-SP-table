@@ -1,8 +1,12 @@
-#include "main.h"
+#include <SDL3/SDL_render.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#include "include/config.h"
+#include "include/types.h"
+#include "include/globals.h"
+#include "include/utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-/* Definitions of globals (previously 'static' in the big file) */
 SDL_Renderer *g_renderer = NULL;
 SDL_Window *g_window = NULL;
 TTF_Font *g_font = NULL;

@@ -1,5 +1,4 @@
-#include "main.h"
-#include <math.h>
+#include "include/scroll.h"
 
 void update_scroll(void) {
 #if SMOOTH_SCROLL

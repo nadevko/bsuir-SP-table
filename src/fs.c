@@ -1,4 +1,7 @@
-#include "main.h"
+#include "include/globals.h"
+#include "include/config.h"
+#include "include/utils.h"
+#include "include/fs.h"
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>

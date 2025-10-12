@@ -1,4 +1,7 @@
-#include "main.h"
+#include "include/layout.h"
+#include "include/types.h"
+#include "include/config.h"
+#include "include/globals.h"
 #include <math.h>
 #include <stdlib.h>
 
