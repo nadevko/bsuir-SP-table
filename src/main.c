@@ -1,14 +1,15 @@
-#include "include/layout.h"
-#include "include/config.h"
-#include "include/globals.h"
-#include "include/events.h"
-#include "include/scroll.h"
-#include "include/grid.h"
-#include "include/fs.h"
-#include "include/utils.h"
+// main.c
 #include "include/main.h"
-#include <fontconfig/fontconfig.h>
+#include "include/config.h"
+#include "include/events.h"
+#include "include/fs.h"
+#include "include/globals.h"
+#include "include/grid.h"
+#include "include/layout.h"
+#include "include/scroll.h"
+#include "include/utils.h"
 #include <errno.h>
+#include <fontconfig/fontconfig.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,21 +37,17 @@ int main(int argc, char *argv[]) {
   /* Set grid dimensions (start with 1 row for headers) */
   g_cols = DEFAULT_COLS; // 4 columns: File, Size (bytes), Date, Permissions
   g_rows = 1;
-
   atexit(cleanup);
 
   SDL_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL initialisation failed");
-
   SDL_CHECK(TTF_Init(), "SDL-ttf initialisation failed");
 #ifdef WITH_FONTCONFIG
   FcConfig *fontconfig;
   ANY_CHECK(fontconfig = FcInitLoadConfigAndFonts(),
             "FcConfig initialisation failed");
-
   FcPattern *pattern;
   ANY_CHECK(pattern = FcNameParse((const FcChar8 *)CELL_TEXT_NAME),
             "Failed to parse font name");
-
   FcConfigSubstitute(fontconfig, pattern, FcMatchPattern);
   FcDefaultSubstitute(pattern);
 
@@ -64,7 +61,6 @@ int main(int argc, char *argv[]) {
             "Failed to find font file");
 
   g_font = TTF_OpenFont((const char *)file, CELL_TEXT_SIZE);
-
   FcPatternDestroy(pattern);
   FcPatternDestroy(match);
   FcConfigDestroy(fontconfig);
@@ -129,6 +125,7 @@ int main(int argc, char *argv[]) {
 
   /* Start filesystem traversal thread */
   char *thread_dir = strdup(dir_path);
+
   g_fs_traversing = true;
   g_stop = false;
   SDL_Thread *fs_thread =
@@ -140,7 +137,6 @@ int main(int argc, char *argv[]) {
       free(dir_path);
     return 1;
   }
-
   if (argc == 1)
     free(dir_path);
 
@@ -157,6 +153,7 @@ int main(int argc, char *argv[]) {
   g_scroll_target_y = g_offset_y;
 
   bool running = true;
+
   SDL_Event event;
   const int frame_delay_ms = 16; /* ~60 FPS */
 
@@ -165,8 +162,8 @@ int main(int argc, char *argv[]) {
     /* Get current window size and compute layout */
     int win_w_local = 0, win_h_local = 0;
     SDL_GetWindowSize(g_window, &win_w_local, &win_h_local);
-
     SDL_LockMutex(g_grid_mutex);
+
     SizeAlloc sa = sizeAllocate(win_w_local, win_h_local);
 
     /* Update global copies used by event handlers */
@@ -176,6 +173,42 @@ int main(int argc, char *argv[]) {
     g_total_grid_h = sa.total_grid_h;
     g_content_w = sa.content_w;
     g_content_h = sa.content_h;
+
+    /* NEW: store row_height and copy column geometry to globals for hit-testing
+     */
+    g_row_height = sa.row_height;
+
+    /* copy col widths & left positions into globals (replace previous arrays)
+     */
+    if (g_col_left) {
+      free(g_col_left);
+      g_col_left = NULL;
+    }
+    if (g_col_widths) {
+      free(g_col_widths);
+      g_col_widths = NULL;
+    }
+    if (g_cols > 0) {
+      g_col_left = malloc(sizeof(float) * g_cols);
+      g_col_widths = malloc(sizeof(int) * g_cols);
+      if (g_col_left && g_col_widths) {
+        for (int c = 0; c < g_cols; c++) {
+          g_col_left[c] = sa.col_left[c];
+          g_col_widths[c] = sa.col_widths[c];
+        }
+      } else {
+        /* allocation failure — free any partials and set to NULL (best effort)
+         */
+        if (g_col_left) {
+          free(g_col_left);
+          g_col_left = NULL;
+        }
+        if (g_col_widths) {
+          free(g_col_widths);
+          g_col_widths = NULL;
+        }
+      }
+    }
 
     /* Process all pending events */
     while (SDL_PollEvent(&event)) {
@@ -201,6 +234,5 @@ int main(int argc, char *argv[]) {
 
   g_stop = true;
   SDL_WaitThread(fs_thread, NULL);
-
   return 0;
 }

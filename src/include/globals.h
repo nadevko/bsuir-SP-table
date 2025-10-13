@@ -1,18 +1,15 @@
 #pragma once
-/* globals.h — global variables and cleanup */
 
+#include "types.h"
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <stdio.h>
-
-#include "types.h"
 
 /* Globals (defined in src/globals.c) */
 extern SDL_Renderer *g_renderer;
 extern SDL_Window *g_window;
 extern TTF_Font *g_font;
 extern Cell **g_grid;
-
 extern int g_rows;
 extern int g_cols;
 
@@ -26,6 +23,7 @@ extern float g_drag_start_offset;
 
 extern bool g_need_horz;
 extern bool g_need_vert;
+
 extern float g_total_grid_w;
 extern float g_total_grid_h;
 extern float g_content_w;
@@ -53,6 +51,19 @@ extern bool g_fs_traversing;
 
 /* Stop flag for traversal */
 extern volatile bool g_stop;
+
+/* NEW: selection state (indexing) */
+/* g_selected_row, g_selected_col — coordinates of selected cell (or -1 if
+   none). g_selected_index = g_selected_row * g_cols + g_selected_col (or -1).
+ */
+extern int g_selected_row;
+extern int g_selected_col;
+extern int g_selected_index;
+
+/* NEW: row height and column geometry cached for event hit-testing */
+extern float g_row_height;
+extern float *g_col_left; /* float array length g_cols */
+extern int *g_col_widths; /* int array length g_cols */
 
 /* Prototypes */
 void cleanup(void);
