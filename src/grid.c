@@ -4,6 +4,7 @@
 #include "include/globals.h"
 #include "include/scrollbar.h"
 #include "include/utils.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -231,7 +232,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
         continue;
       size_t len = strlen(g_grid[r][c].text);
       SDL_Surface *label_surface =
-          TTF_RenderText_LCD(g_font, g_grid[r][c].text, len, CELL_TEXT_COLOUR,
+          TTF_RenderText_LCD(g_font, g_grid[r][c].text, len, TEXT_FONT_COLOUR,
                              GRID_BACKGROUND_COLOUR);
       if (!label_surface)
         continue;
@@ -245,19 +246,19 @@ void draw_with_alloc(const SizeAlloc *sa) {
       float padding_x = 0, padding_y = 0;
       int text_w = label_surface->w;
       int text_h = label_surface->h;
-#if CELL_TEXT_POSITION_HORIZONTAL == LEFT
+#if TEXT_FONT_POSITION_HORIZONTAL == LEFT
       padding_x = CELL_PADDING;
-#elif CELL_TEXT_POSITION_HORIZONTAL == CENTER
+#elif TEXT_FONT_POSITION_HORIZONTAL == CENTER
       padding_x = (sa->col_widths[c] - text_w) / 2.0f;
-#elif CELL_TEXT_POSITION_HORIZONTAL == RIGHT
+#elif TEXT_FONT_POSITION_HORIZONTAL == RIGHT
       padding_x = sa->col_widths[c] - text_w - CELL_PADDING;
 #endif
 
-#if CELL_TEXT_POSITION_VERTICAL == TOP
+#if TEXT_FONT_POSITION_VERTICAL == TOP
       padding_y = CELL_PADDING;
-#elif CELL_TEXT_POSITION_VERTICAL == CENTER
+#elif TEXT_FONT_POSITION_VERTICAL == CENTER
       padding_y = (cell_h - text_h) / 2.0f;
-#elif CELL_TEXT_POSITION_VERTICAL == BOTTOM
+#elif TEXT_FONT_POSITION_VERTICAL == BOTTOM
       padding_y = cell_h - text_h - CELL_PADDING;
 #endif
 

@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
   ANY_CHECK(fontconfig = FcInitLoadConfigAndFonts(),
             "FcConfig initialisation failed");
   FcPattern *pattern;
-  ANY_CHECK(pattern = FcNameParse((const FcChar8 *)CELL_TEXT_NAME),
+  ANY_CHECK(pattern = FcNameParse((const FcChar8 *)TEXT_FONT_NAME),
             "Failed to parse font name");
   FcConfigSubstitute(fontconfig, pattern, FcMatchPattern);
   FcDefaultSubstitute(pattern);
@@ -60,12 +60,12 @@ int main(int argc, char *argv[]) {
   ANY_CHECK(FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch,
             "Failed to find font file");
 
-  g_font = TTF_OpenFont((const char *)file, CELL_TEXT_SIZE);
+  g_font = TTF_OpenFont((const char *)file, TEXT_FONT_SIZE);
   FcPatternDestroy(pattern);
   FcPatternDestroy(match);
   FcConfigDestroy(fontconfig);
 #else
-  g_font = TTF_OpenFont(CELL_TEXT_NAME, CELL_TEXT_SIZE);
+  g_font = TTF_OpenFont(TEXT_FONT_NAME, TEXT_FONT_SIZE);
 #endif
   if (!g_font) {
     log_fs_error("Failed to load font: %s", SDL_GetError());
