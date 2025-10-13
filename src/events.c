@@ -7,11 +7,95 @@
 #include <math.h>
 
 /*
-  Обработчик событий:
-  - использует scroll_add_target/scroll_apply_immediate вместо прямой
-  модификации глобалей, чтобы логика прокрутки оставалась в scroll.c.
-  - остальная логика hit-testing/drag/selection оставлена прежней.
+  Обработчик событий с навигацией и корректным ensure_cell_visible.
+  Изменение: при cell_w > g_content_w отдаём приоритет левому краю -> target_x =
+  cell_x.
 */
+
+static void ensure_cell_visible_and_scroll(int row, int col) {
+  if (!g_col_left || !g_col_widths)
+    return;
+
+  /* compute virtual cell coordinates relative to grid origin */
+  float cell_x = g_col_left[col];
+  float cell_w = (float)g_col_widths[col];
+  float cell_y = row * (g_row_height + GRID_LINE_WIDTH);
+  float cell_h = g_row_height;
+
+  /* visible area in virtual coords is [g_offset_x, g_offset_x + g_content_w)
+   * etc. */
+  float left = g_offset_x;
+  float right = g_offset_x + g_content_w;
+  float top = g_offset_y;
+  float bottom = g_offset_y + g_content_h;
+
+  float desired_target_x = g_scroll_target_x;
+  float desired_target_y = g_scroll_target_y;
+
+  /* X: prioritize left edge when cell is wider than view */
+  if (cell_w > g_content_w) {
+    /* cell longer than visible width -> ensure left edge is visible */
+    desired_target_x = cell_x;
+  } else {
+    /* cell fits into view width: if it's left of view, align left;
+       if its right is beyond view, align so its right equals view right */
+    if (cell_x < left) {
+      desired_target_x = cell_x;
+    } else if (cell_x + cell_w > right) {
+      desired_target_x = cell_x + cell_w - g_content_w;
+    }
+    /* otherwise already fully visible -> no change */
+  }
+
+  /* Y: previous behaviour (keep as before) */
+  if (cell_y < top) {
+    desired_target_y = cell_y;
+  } else if (cell_y + cell_h > bottom) {
+    desired_target_y = cell_y + cell_h - g_content_h;
+  }
+
+  /* Compute deltas relative to current scroll target */
+  float dx = desired_target_x - g_scroll_target_x;
+  float dy = desired_target_y - g_scroll_target_y;
+
+#if SMOOTH_SCROLL
+  /* плавно меняем цель на delta */
+  scroll_add_target(dx, dy);
+#else
+  /* мгновенно применяем (и синхронизируем цель) */
+  scroll_apply_immediate(dx, dy);
+#endif
+}
+
+static void move_selection_by(int drow, int dcol) {
+  int new_r = g_selected_row;
+  int new_c = g_selected_col;
+
+  /* If no selection, start at (0,0) */
+  if (new_r < 0 || new_c < 0) {
+    new_r = 0;
+    new_c = 0;
+  } else {
+    new_r = new_r + drow;
+    new_c = new_c + dcol;
+  }
+
+  if (new_r < 0)
+    new_r = 0;
+  if (new_c < 0)
+    new_c = 0;
+  if (new_r >= g_rows)
+    new_r = g_rows - 1;
+  if (new_c >= g_cols)
+    new_c = g_cols - 1;
+
+  g_selected_row = new_r;
+  g_selected_col = new_c;
+  g_selected_index = g_selected_row * g_cols + g_selected_col;
+
+  /* ensure visible */
+  ensure_cell_visible_and_scroll(g_selected_row, g_selected_col);
+}
 
 bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
   bool quit = false;
@@ -31,37 +115,30 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
         quit = true;
       }
       break;
+
     case SDLK_UP:
-      /* стрелки должны перемещать как раньше — применяем немедленно и
-       * синхронизируем цель */
-      scroll_apply_immediate(0.0f,
-                             (NATURAL_SCROLL ? SCROLL_SPEED : -SCROLL_SPEED));
+      /* Если Ctrl+Up — прежнее поведение (page?) не трогаем; здесь только
+       * простые стрелки */
+      move_selection_by(-1, 0);
       break;
     case SDLK_DOWN:
-      scroll_apply_immediate(0.0f,
-                             (NATURAL_SCROLL ? -SCROLL_SPEED : SCROLL_SPEED));
+      move_selection_by(+1, 0);
       break;
     case SDLK_LEFT:
-      scroll_apply_immediate((NATURAL_SCROLL ? SCROLL_SPEED : -SCROLL_SPEED),
-                             0.0f);
+      move_selection_by(0, -1);
       break;
     case SDLK_RIGHT:
-      scroll_apply_immediate((NATURAL_SCROLL ? -SCROLL_SPEED : SCROLL_SPEED),
-                             0.0f);
+      move_selection_by(0, +1);
       break;
     }
     break;
 
   case SDL_EVENT_MOUSE_WHEEL: {
-    /* dx/dy — в пикселях (ориентировочно), сохраняем прежнюю знаковую логику */
     float scroll_factor = (NATURAL_SCROLL ? 1.0f : -1.0f);
     float dy = scroll_factor * event->wheel.y * SCROLL_SPEED;
     float dx = -scroll_factor * event->wheel.x * SCROLL_SPEED;
 
 #if SMOOTH_SCROLL
-    /* Если включена плавность — при колесике меняем ТОЛЬКО цель (если не
-       тащат), иначе при drag'e (перетаскивании ползунка) применяем немедленно.
-     */
     if (g_dragging_vert) {
       scroll_apply_immediate(0.0f, dy);
     } else {
@@ -74,12 +151,13 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
       scroll_add_target(dx, 0.0f);
     }
 #else
-    /* Немедленно применяем и синхронизируем цель */
     scroll_apply_immediate(dx, dy);
 #endif
   } break;
 
   case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    /* --- оставлена прежняя обработка кликов/хитов для скроллбаров/ячейки ---
+     */
     if (event->button.button == SDL_BUTTON_LEFT) {
       int mx = event->button.x;
       int my = event->button.y;
@@ -137,7 +215,7 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
         }
       }
 
-      /* Cell hit-testing (как раньше) */
+      /* Cell hit-testing */
       if (mx < (int)view_x_local ||
           mx >= (int)(view_x_local + content_w_local) ||
           my < (int)view_y_local ||
@@ -202,6 +280,8 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
         g_selected_row = row;
         g_selected_col = found_col;
         g_selected_index = g_selected_row * g_cols + g_selected_col;
+        /* make sure visible */
+        ensure_cell_visible_and_scroll(g_selected_row, g_selected_col);
       } else {
         g_selected_row = -1;
         g_selected_col = -1;
@@ -214,7 +294,6 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
     if (g_dragging_vert) {
       int win_h_local2;
       SDL_GetWindowSize(g_window, NULL, &win_h_local2);
-      float view_h_local = g_view_h;
       float content_h_local = g_content_h;
       float vert_bar_h = content_h_local;
       float thumb_h =
@@ -224,13 +303,11 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
       float dy = event->motion.y - g_drag_start_pos;
       float scroll_factor = (track_h > 0.0f) ? (max_offset_y / track_h) : 0.0f;
       g_offset_y = g_drag_start_offset + dy * scroll_factor;
-      /* при перетаскивании синхронизируем цель */
       g_scroll_target_y = g_offset_y;
       scroll_clamp_all();
     } else if (g_dragging_horz) {
       int win_w_local2;
       SDL_GetWindowSize(g_window, &win_w_local2, NULL);
-      float view_w_local = g_view_w;
       float content_w_local = g_content_w;
       float horz_bar_w = content_w_local;
       float thumb_w =

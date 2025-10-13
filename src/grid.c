@@ -1,22 +1,14 @@
-// grid.c
+// src/grid.c
 #include "include/grid.h"
 #include "include/config.h"
 #include "include/globals.h"
+#include "include/scrollbar.h"
 #include "include/utils.h"
 #include <stdlib.h>
 #include <string.h>
 
-/* Draw the grid + scrollbars + texts using values from SizeAlloc.
- * GRID_DRAWING_STRATEGY controls behaviour:
- *   1 (default) - draw grid "in relation to content" (as before), but
- *                 vertical lines limited to grid height; draw bottom line after
- * last row.
- *   0 - draw grid filling entire visible area, taking offsets into account.
- *
- * FULL_WIDTH_HORIZ_LINES (new): when GRID_DRAWING_STRATEGY == 1 and this flag
- * is enabled, horizontal separators span content_w (full width). Also draw the
- * right border of the real grid (so the right-side empty column is visible).
- */
+/* Draw the grid + texts using values from SizeAlloc.
+   Scrollbars moved to scrollbar.c via draw_scrollbars(). */
 
 void draw_with_alloc(const SizeAlloc *sa) {
   int win_w, win_h;
@@ -53,58 +45,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
   SDL_RenderFillRect(g_renderer,
                      &(SDL_FRect){view_x, view_y, content_w, content_h});
 
-  /* Draw vertical scrollbar if needed */
-  float vert_thumb_h = 0.0f, vert_thumb_y = 0.0f;
-  if (sa->need_vert) {
-    float vert_bar_x = view_x + content_w;
-    float vert_bar_y = view_y;
-    float vert_bar_h = content_h;
-    SDL_SetRenderDrawColour(g_renderer, SCROLLBAR_BG_COLOUR);
-    SDL_RenderFillRect(g_renderer, &(SDL_FRect){vert_bar_x, vert_bar_y,
-                                                SCROLLBAR_WIDTH, vert_bar_h});
-    vert_thumb_h = SDL_max(10.0f, content_h * (content_h / sa->total_grid_h));
-    float max_offset_y_local = SDL_max(0.0f, sa->total_grid_h - content_h);
-    if (max_offset_y_local <= 0.0f) {
-      vert_thumb_y = vert_bar_y;
-    } else {
-      float track_h = vert_bar_h - vert_thumb_h;
-      vert_thumb_y = vert_bar_y + (g_offset_y / max_offset_y_local) * track_h;
-    }
-    SDL_SetRenderDrawColour(g_renderer, SCROLLBAR_THUMB_COLOUR);
-    SDL_RenderFillRect(g_renderer, &(SDL_FRect){vert_bar_x, vert_thumb_y,
-                                                SCROLLBAR_WIDTH, vert_thumb_h});
-  }
-
-  /* Draw horizontal scrollbar if needed */
-  float horz_thumb_w = 0.0f, horz_thumb_x = 0.0f;
-  if (sa->need_horz) {
-    float horz_bar_x = view_x;
-    float horz_bar_y = view_y + content_h;
-    float horz_bar_w = content_w;
-    SDL_SetRenderDrawColour(g_renderer, SCROLLBAR_BG_COLOUR);
-    SDL_RenderFillRect(g_renderer, &(SDL_FRect){horz_bar_x, horz_bar_y,
-                                                horz_bar_w, SCROLLBAR_WIDTH});
-    horz_thumb_w = SDL_max(10.0f, content_w * (content_w / sa->total_grid_w));
-    float max_offset_x_local = SDL_max(0.0f, sa->total_grid_w - content_w);
-    if (max_offset_x_local <= 0.0f) {
-      horz_thumb_x = horz_bar_x;
-    } else {
-      float track_w = horz_bar_w - horz_thumb_w;
-      horz_thumb_x = horz_bar_x + (g_offset_x / max_offset_x_local) * track_w;
-    }
-    SDL_SetRenderDrawColour(g_renderer, SCROLLBAR_THUMB_COLOUR);
-    SDL_RenderFillRect(g_renderer, &(SDL_FRect){horz_thumb_x, horz_bar_y,
-                                                horz_thumb_w, SCROLLBAR_WIDTH});
-  }
-
-  /* Draw corner if both scrollbars */
-  if (sa->need_vert && sa->need_horz) {
-    SDL_SetRenderDrawColour(g_renderer, SCROLLBAR_BG_COLOUR);
-    SDL_RenderFillRect(g_renderer,
-                       &(SDL_FRect){view_x + content_w, view_y + content_h,
-                                    SCROLLBAR_WIDTH, SCROLLBAR_WIDTH});
-  }
-
   /* Clip to content area for grid drawing */
   SDL_Rect clip_rect = {(int)view_x, (int)view_y, (int)content_w,
                         (int)content_h};
@@ -112,7 +52,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
 #ifdef WITH_GRID
 #if GRID_DRAWING_STRATEGY == 0
-  /* Horizontal separators tiled to fill view (unchanged) */
+  /* Horizontal separators tiled to fill view */
   {
     float offset_mod = fmodf(g_offset_y, row_full);
     if (offset_mod < 0.0f)
@@ -134,10 +74,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
     free(horz_rects);
   }
 
-  /* Vertical separators: draw real ones and extend to the right repeating last
-     column. IMPORTANT: draw separators at (col_left[i] - line_w) so the
-     separator occupies the interval [col_left[i] - line_w, col_left[i])
-     consistent with sizeAllocate(). */
+  /* Vertical separators: draw at [col_left[i] - line_w, ... ) */
   {
     int max_v_separators = g_cols + 100;
     SDL_FRect *vert_rects = malloc(max_v_separators * sizeof(SDL_FRect));
@@ -149,20 +86,11 @@ void draw_with_alloc(const SizeAlloc *sa) {
       vert_rects[vert_count++] = (SDL_FRect){sep_x, view_y, line_w, content_h};
     }
     if (g_cols > 0) {
-      /* Start tiling separators after the last real column:
-         first separator X = view_x - g_offset_x + col_left[last] +
-         col_widths[last] and next separator = prev + last_col_w + line_w
-         (repeat pattern). */
       float last_col_w = sa->col_widths[g_cols - 1];
       float current_sep_x = view_x - g_offset_x + sa->col_left[g_cols - 1] +
                             sa->col_widths[g_cols - 1];
       int guard = 0;
       while (current_sep_x <= view_x + content_w && guard < 10000) {
-        /* current_sep_x is the OUTER edge of separator; we must draw separator
-           at [current_sep_x, current_sep_x + line_w). But since our separator
-           convention is [col_left - line_w, col_left), and current_sep_x here
-           already equals that "col_left_of_next", we draw at current_sep_x
-           (which is correct). */
         if (!(current_sep_x + line_w < view_x ||
               current_sep_x > view_x + content_w)) {
           vert_rects[vert_count++] =
@@ -181,7 +109,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
 #else
   /* GRID_DRAWING_STRATEGY == 1 (content related) */
-  /* Horizontal separators BETWEEN rows (only those between rows) */
   SDL_FRect *horz_rects =
       malloc((g_rows) * sizeof(SDL_FRect)); /* +1 for bottom line */
   int horz_count = 0;
@@ -210,8 +137,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
     }
   }
 
-  /* Vertical grid lines — draw only while there is grid (visible grid height)
-   */
+  /* Vertical separators */
   float grid_top = view_y - g_offset_y;
   float grid_bottom = grid_top + sa->total_grid_h;
   float vis_top = SDL_max(view_y, grid_top);
@@ -220,11 +146,9 @@ void draw_with_alloc(const SizeAlloc *sa) {
   if (vis_grid_h < 0.0f)
     vis_grid_h = 0.0f;
 
-  SDL_FRect *vert_rects = malloc(
-      (g_cols + 1) * sizeof(SDL_FRect)); /* +1 for potential right border */
+  SDL_FRect *vert_rects = malloc((g_cols + 1) * sizeof(SDL_FRect));
   int vert_count = 0;
   for (int i = 1; i < g_cols; i++) {
-    /* draw separator at col_left[i] - line_w */
     float sep_x = view_x - g_offset_x + sa->col_left[i] - line_w;
     if (sep_x >= view_x && sep_x <= view_x + content_w) {
       if (vis_grid_h > 0.0f) {
@@ -236,8 +160,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
 #if FULL_WIDTH_HORIZ_LINES
   if (g_cols > 0 && vis_grid_h > 0.0f) {
-    /* draw explicit right border at end of real columns (this is the OUTER edge
-     * of last column) */
     float right_x = view_x - g_offset_x + sa->col_left[g_cols - 1] +
                     sa->col_widths[g_cols - 1];
     if (right_x >= view_x && right_x <= view_x + content_w) {
@@ -348,5 +270,9 @@ void draw_with_alloc(const SizeAlloc *sa) {
   }
 
   SDL_SetRenderClipRect(g_renderer, NULL);
+
+  /* Draw scrollbars (выделенная ответственность) */
+  draw_scrollbars(sa);
+
   SDL_RenderPresent(g_renderer);
 }
