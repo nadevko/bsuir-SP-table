@@ -24,8 +24,11 @@
 #define PERM_SYMBOLIC 0
 #define PERM_NUMERIC 1
 #define PERM_FORMAT PERM_SYMBOLIC
+#define SHOW_FILE_RELATIVE_PATH
 
-#define SHOW_FILE_TYPE 0
+#define SHOW_FILE_TYPE 1
+#define SHORTENED_EXTRA_BITS 0
+#define ADD_PERMISSIONS_WHITESPACES 1
 
 /* --- remaining original config --- */
 #define WITH_BORDER

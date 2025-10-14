@@ -1,7 +1,7 @@
-#include "include/globals.h"
-#include "include/config.h"
-#include "include/utils.h"
 #include "include/fs.h"
+#include "include/config.h"
+#include "include/globals.h"
+#include "include/utils.h"
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
@@ -134,11 +134,16 @@ static void traverse_recursive(const char *dir_path, const char *prefix,
     // Use basename of resolved_path for display_name
     const char *basename = strrchr(resolved_path, '/');
     basename = basename ? basename + 1 : resolved_path;
+
+#ifdef SHOW_FILE_RELATIVE_PATH
     if (prefix[0] == '\0') {
+#endif
       snprintf(display_name, sizeof(display_name), "%s", basename);
+#ifdef SHOW_FILE_RELATIVE_PATH
     } else {
       snprintf(display_name, sizeof(display_name), "%s/%s", prefix, basename);
     }
+#endif
 
     bool is_sym = S_ISLNK(st.st_mode);
     bool is_dir = false;
@@ -171,12 +176,78 @@ static void traverse_recursive(const char *dir_path, const char *prefix,
     struct tm *mtime = localtime(&st.st_mtime);
     strftime(date_str, sizeof(date_str), "%d.%m.%Y", mtime);
 
-    char perm_str[12];
+    /* ... (верх файла без изменений) ... */
+
+    char perm_str[20];
 #if PERM_FORMAT == PERM_NUMERIC
     snprintf(perm_str, sizeof(perm_str), "%04o",
              (unsigned)(st.st_mode & 07777));
 #else // PERM_SYMBOLIC
+    /* Build permission string with support for:
+     * - SHOW_FILE_TYPE
+     * - SHORTENED_EXTRA_BITS (default on)
+     * - ADD_PERMISSIONS_WHITESPACES
+     *
+     * Two modes:
+     * 1) SHORTENED_EXTRA_BITS == 1 (default) : ls-like merging of special bits
+     * into execute positions example: -rwsr-sr-t 2) SHORTENED_EXTRA_BITS == 0 :
+     * print three extra bits (SUID, SGID, STICKY) BEFORE file-type example: s g
+     * t -rwx rw- r--
+     *
+     * If ADD_PERMISSIONS_WHITESPACES == 1, add spaces between user/group/other
+     * groups.
+     */
     int idx = 0;
+
+    /* prepare user/group/other triplets (without merged special bits) */
+    char user[4], group[4], other[4];
+    mode_t mode = st.st_mode;
+
+    user[0] = (mode & S_IRUSR) ? 'r' : '-';
+    user[1] = (mode & S_IWUSR) ? 'w' : '-';
+    user[2] = (mode & S_IXUSR) ? 'x' : '-';
+    user[3] = '\0';
+
+    group[0] = (mode & S_IRGRP) ? 'r' : '-';
+    group[1] = (mode & S_IWGRP) ? 'w' : '-';
+    group[2] = (mode & S_IXGRP) ? 'x' : '-';
+    group[3] = '\0';
+
+    other[0] = (mode & S_IROTH) ? 'r' : '-';
+    other[1] = (mode & S_IWOTH) ? 'w' : '-';
+    other[2] = (mode & S_IXOTH) ? 'x' : '-';
+    other[3] = '\0';
+
+    /* compute extra bits representation (SUID, SGID, STICKY) */
+    char extra[4] = {'-', '-', '-', '\0'};
+    if (mode & S_ISUID)
+      extra[0] = (mode & S_IXUSR) ? 's' : 'S';
+    if (mode & S_ISGID)
+      extra[1] = (mode & S_IXGRP) ? 's' : 'S';
+    if (mode & S_ISVTX)
+      extra[2] = (mode & S_IXOTH) ? 't' : 'T';
+
+#if SHORTENED_EXTRA_BITS
+    /* merge special bits into execute positions (ls-like) */
+    if (mode & S_ISUID)
+      user[2] = (mode & S_IXUSR) ? 's' : 'S';
+    if (mode & S_ISGID)
+      group[2] = (mode & S_IXGRP) ? 's' : 'S';
+    if (mode & S_ISVTX)
+      other[2] = (mode & S_IXOTH) ? 't' : 'T';
+#endif
+
+#if !SHORTENED_EXTRA_BITS
+    perm_str[idx++] = extra[0];
+    perm_str[idx++] = extra[1];
+    perm_str[idx++] = extra[2];
+
+#if ADD_PERMISSIONS_WHITESPACES
+    perm_str[idx++] = ' ';
+#endif
+
+#endif
+
     if (SHOW_FILE_TYPE) {
       if (S_ISDIR(st.st_mode))
         perm_str[idx++] = 'd';
@@ -195,19 +266,24 @@ static void traverse_recursive(const char *dir_path, const char *prefix,
       else
         perm_str[idx++] = '?';
     }
-    mode_t mode = st.st_mode;
-    perm_str[idx++] = (mode & S_IRUSR) ? 'r' : '-';
-    perm_str[idx++] = (mode & S_IWUSR) ? 'w' : '-';
-    perm_str[idx++] = (mode & S_IXUSR) ? ((mode & S_ISUID) ? 's' : 'x')
-                                       : ((mode & S_ISUID) ? 'S' : '-');
-    perm_str[idx++] = (mode & S_IRGRP) ? 'r' : '-';
-    perm_str[idx++] = (mode & S_IWGRP) ? 'w' : '-';
-    perm_str[idx++] = (mode & S_IXGRP) ? ((mode & S_ISGID) ? 's' : 'x')
-                                       : ((mode & S_ISGID) ? 'S' : '-');
-    perm_str[idx++] = (mode & S_IROTH) ? 'r' : '-';
-    perm_str[idx++] = (mode & S_IWOTH) ? 'w' : '-';
-    perm_str[idx++] = (mode & S_IXOTH) ? ((mode & S_ISVTX) ? 't' : 'x')
-                                       : ((mode & S_ISVTX) ? 'T' : '-');
+
+    for (int i = 0; i < 3; ++i)
+      perm_str[idx++] = user[i];
+
+#if ADD_PERMISSIONS_WHITESPACES
+    perm_str[idx++] = ' ';
+#endif
+
+    for (int i = 0; i < 3; ++i)
+      perm_str[idx++] = group[i];
+
+#if ADD_PERMISSIONS_WHITESPACES
+    perm_str[idx++] = ' ';
+#endif
+
+    for (int i = 0; i < 3; ++i)
+      perm_str[idx++] = other[i];
+
     perm_str[idx] = '\0';
 #endif
 
