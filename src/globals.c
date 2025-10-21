@@ -1,8 +1,8 @@
-// globals.c
 #include "include/globals.h"
 #include "include/config.h"
 #include "include/types.h"
 #include "include/utils.h"
+#include "include/virtual_scroll.h"
 #include <SDL3/SDL_render.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <stdio.h>
@@ -31,36 +31,35 @@ float g_view_y = 0.0f;
 float g_view_w = 0.0f;
 float g_view_h = 0.0f;
 
-/* Log file pointer (initialized by init_fs_log) */
 FILE *g_log_file = NULL;
 
-/* Smooth scroll targets (mouse wheel / touchpad) */
 float g_scroll_target_x = 0.0f;
 float g_scroll_target_y = 0.0f;
 
-/* Mutex (initialized in main) */
 SDL_Mutex *g_grid_mutex = NULL;
 
-/* Max column widths (initialized in main) */
 int *g_max_col_widths = NULL;
 
-/* FS traversing flag */
 bool g_fs_traversing = false;
 
-/* Stop flag */
 volatile bool g_stop = false;
 
-/* NEW: selection globals */
 int g_selected_row = -1;
 int g_selected_col = -1;
 int g_selected_index = -1;
 
-/* NEW: row height and copied column geometry for hit-testing */
 float g_row_height = 0.0f;
 float *g_col_left = NULL;
 int *g_col_widths = NULL;
 
+VirtualScrollState *g_vscroll = NULL;
+float g_last_content_h = 0.0f;
+
 void cleanup(void) {
+  if (g_vscroll) {
+    vscroll_cleanup(g_vscroll);
+    g_vscroll = NULL;
+  }
   if (g_grid_mutex) {
     SDL_DestroyMutex(g_grid_mutex);
     g_grid_mutex = NULL;

@@ -1,15 +1,13 @@
-// src/grid.c
+/* src/grid.c */
 #include "include/grid.h"
 #include "include/config.h"
 #include "include/globals.h"
 #include "include/scrollbar.h"
 #include "include/utils.h"
+#include "include/virtual_scroll.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Draw the grid + texts using values from SizeAlloc.
-   Scrollbars moved to scrollbar.c via draw_scrollbars(). */
 
 void draw_with_alloc(const SizeAlloc *sa) {
   int win_w, win_h;
@@ -29,7 +27,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
   float cell_h = sa->row_height;
   float row_full = cell_h + line_w;
 
-  /* Clamp offsets to avoid seeing outside content */
   float max_offset_x = SDL_max(0.0f, sa->total_grid_w - content_w);
   float max_offset_y = SDL_max(0.0f, sa->total_grid_h - content_h);
 
@@ -41,19 +38,16 @@ void draw_with_alloc(const SizeAlloc *sa) {
   SDL_RenderClear(g_renderer);
 #endif
 
-  /* Draw grid background */
   SDL_SetRenderDrawColour(g_renderer, GRID_BACKGROUND_COLOUR);
   SDL_RenderFillRect(g_renderer,
                      &(SDL_FRect){view_x, view_y, content_w, content_h});
 
-  /* Clip to content area for grid drawing */
   SDL_Rect clip_rect = {(int)view_x, (int)view_y, (int)content_w,
                         (int)content_h};
   SDL_SetRenderClipRect(g_renderer, &clip_rect);
 
 #ifdef WITH_GRID
 #if GRID_DRAWING_STRATEGY == 0
-  /* Horizontal separators tiled to fill view */
   {
     float offset_mod = fmodf(g_offset_y, row_full);
     if (offset_mod < 0.0f)
@@ -75,7 +69,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
     free(horz_rects);
   }
 
-  /* Vertical separators: draw at [col_left[i] - line_w, ... ) */
   {
     int max_v_separators = g_cols + 100;
     SDL_FRect *vert_rects = malloc(max_v_separators * sizeof(SDL_FRect));
@@ -109,9 +102,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
   }
 
 #else
-  /* GRID_DRAWING_STRATEGY == 1 (content related) */
-  SDL_FRect *horz_rects =
-      malloc((g_rows) * sizeof(SDL_FRect)); /* +1 for bottom line */
+  SDL_FRect *horz_rects = malloc((g_rows) * sizeof(SDL_FRect));
   int horz_count = 0;
   for (int i = 1; i < g_rows; i++) {
     float line_y = view_y - g_offset_y + i * cell_h + (i - 1) * line_w;
@@ -125,7 +116,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
     }
   }
 
-  /* bottom line after last row */
   {
     float bottom_y = view_y - g_offset_y + sa->total_grid_h;
     if (bottom_y >= view_y && bottom_y <= view_y + content_h) {
@@ -138,7 +128,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
     }
   }
 
-  /* Vertical separators */
   float grid_top = view_y - g_offset_y;
   float grid_bottom = grid_top + sa->total_grid_h;
   float vis_top = SDL_max(view_y, grid_top);
@@ -181,10 +170,9 @@ void draw_with_alloc(const SizeAlloc *sa) {
   free(horz_rects);
   free(vert_rects);
 #endif
-#endif /* WITH_GRID */
+#endif
 
-  /* Draw selection border (outer edge lies on cell edge and border goes inward
-   * HIGHLIGHT_BORDER_WIDTH) */
+  /* Draw selection border */
   if (g_selected_index >= 0 && g_selected_row >= 0 && g_selected_col >= 0 &&
       g_selected_row < g_rows && g_selected_col < g_cols && g_col_left &&
       g_col_widths) {
@@ -206,73 +194,91 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
       SDL_SetRenderDrawColour(g_renderer, HIGHLIGHT_BORDER_COLOUR);
 
-      /* Top */
       SDL_RenderFillRect(g_renderer, &(SDL_FRect){cell_x, cell_y, cell_wd, bw});
-      /* Left */
       SDL_RenderFillRect(g_renderer, &(SDL_FRect){cell_x, cell_y, bw, cell_hh});
-      /* Right */
       SDL_RenderFillRect(
           g_renderer, &(SDL_FRect){cell_x + cell_wd - bw, cell_y, bw, cell_hh});
-      /* Bottom */
       SDL_RenderFillRect(
           g_renderer, &(SDL_FRect){cell_x, cell_y + cell_hh - bw, cell_wd, bw});
     }
   }
 
-  /* Draw cell texts (only visible ones) -- same for both strategies */
-  for (int r = 0; r < g_rows; r++) {
-    float cell_y = view_y - g_offset_y + r * row_full;
-    if (cell_y + cell_h < view_y || cell_y > view_y + content_h)
-      continue;
-    for (int c = 0; c < g_cols; c++) {
-      float cell_x = view_x - g_offset_x + sa->col_left[c];
-      if (cell_x + sa->col_widths[c] < view_x || cell_x > view_x + content_w)
-        continue;
-      if (!g_grid[r][c].text || g_grid[r][c].text[0] == '\0')
-        continue;
-      size_t len = strlen(g_grid[r][c].text);
-      SDL_Surface *label_surface =
-          TTF_RenderText_LCD(g_font, g_grid[r][c].text, len, TEXT_FONT_COLOUR,
-                             GRID_BACKGROUND_COLOUR);
-      if (!label_surface)
-        continue;
-      SDL_Texture *label_texture =
-          SDL_CreateTextureFromSurface(g_renderer, label_surface);
-      if (!label_texture) {
-        SDL_DestroySurface(label_surface);
-        continue;
-      }
+  /* Draw cell texts from virtual scroll buffer with texture caching */
+  if (g_vscroll) {
+    /* Если буфер нужно перезагрузить, не рендерим — ждём данные */
+    if (g_vscroll->needs_reload)
+      goto skip_text_render;
 
-      float padding_x = 0, padding_y = 0;
-      int text_w = label_surface->w;
-      int text_h = label_surface->h;
+    for (int buf_idx = 0; buf_idx < g_vscroll->buffer_count; buf_idx++) {
+      int virtual_row = g_vscroll->buffer_start_row + buf_idx;
+      float cell_y = view_y - g_offset_y + virtual_row * row_full;
+
+      if (cell_y + cell_h < view_y || cell_y > view_y + content_h)
+        continue;
+
+      for (int c = 0; c < g_cols; c++) {
+        float cell_x = view_x - g_offset_x + sa->col_left[c];
+
+        if (cell_x + sa->col_widths[c] < view_x || cell_x > view_x + content_w)
+          continue;
+
+        Cell *cell = vscroll_get_cell(g_vscroll, virtual_row, c);
+        if (!cell || !cell->text || cell->text[0] == '\0')
+          continue;
+
+        SDL_Texture *label_texture = NULL;
+
+        label_texture = vscroll_get_cached_texture(g_vscroll, buf_idx, c);
+
+        if (!label_texture) {
+          size_t len = strlen(cell->text);
+          SDL_Surface *label_surface =
+              TTF_RenderText_LCD(g_font, cell->text, len, TEXT_FONT_COLOUR,
+                                 GRID_BACKGROUND_COLOUR);
+          if (!label_surface)
+            continue;
+
+          label_texture =
+              SDL_CreateTextureFromSurface(g_renderer, label_surface);
+          SDL_DestroySurface(label_surface);
+
+          if (!label_texture)
+            continue;
+
+          vscroll_set_cached_texture(g_vscroll, buf_idx, c, label_texture);
+        }
+
+        float padding_x = 0, padding_y = 0;
+        int text_w = cell->text_width;
+        int text_h = cell->text_height;
+
 #if TEXT_FONT_POSITION_HORIZONTAL == LEFT
-      padding_x = CELL_PADDING;
+        padding_x = CELL_PADDING;
 #elif TEXT_FONT_POSITION_HORIZONTAL == CENTER
-      padding_x = (sa->col_widths[c] - text_w) / 2.0f;
+        padding_x = (sa->col_widths[c] - text_w) / 2.0f;
 #elif TEXT_FONT_POSITION_HORIZONTAL == RIGHT
-      padding_x = sa->col_widths[c] - text_w - CELL_PADDING;
+        padding_x = sa->col_widths[c] - text_w - CELL_PADDING;
 #endif
 
 #if TEXT_FONT_POSITION_VERTICAL == TOP
-      padding_y = CELL_PADDING;
+        padding_y = CELL_PADDING;
 #elif TEXT_FONT_POSITION_VERTICAL == CENTER
-      padding_y = (cell_h - text_h) / 2.0f;
+        padding_y = (cell_h - text_h) / 2.0f;
 #elif TEXT_FONT_POSITION_VERTICAL == BOTTOM
-      padding_y = cell_h - text_h - CELL_PADDING;
+        padding_y = cell_h - text_h - CELL_PADDING;
 #endif
 
-      SDL_RenderTexture(g_renderer, label_texture, NULL,
-                        &(SDL_FRect){cell_x + padding_x, cell_y + padding_y,
-                                     (float)text_w, (float)text_h});
-      SDL_DestroySurface(label_surface);
-      SDL_DestroyTexture(label_texture);
+        SDL_RenderTexture(g_renderer, label_texture, NULL,
+                          &(SDL_FRect){cell_x + padding_x, cell_y + padding_y,
+                                       (float)text_w, (float)text_h});
+      }
     }
   }
 
+skip_text_render:
+
   SDL_SetRenderClipRect(g_renderer, NULL);
 
-  /* Draw scrollbars (выделенная ответственность) */
   draw_scrollbars(sa);
 
   SDL_RenderPresent(g_renderer);

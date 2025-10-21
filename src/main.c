@@ -1,4 +1,3 @@
-// main.c
 #include "include/main.h"
 #include "include/config.h"
 #include "include/events.h"
@@ -8,6 +7,7 @@
 #include "include/layout.h"
 #include "include/scroll.h"
 #include "include/utils.h"
+#include "include/virtual_scroll.h"
 #include <errno.h>
 #include <fontconfig/fontconfig.h>
 #include <stdio.h>
@@ -31,11 +31,9 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  /* Initialize filesystem error log early */
   init_fs_log();
 
-  /* Set grid dimensions (start with 1 row for headers) */
-  g_cols = DEFAULT_COLS; // 4 columns: File, Size (bytes), Date, Permissions
+  g_cols = DEFAULT_COLS;
   g_rows = 1;
   atexit(cleanup);
 
@@ -74,7 +72,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  /* Allocate grid */
   g_grid = malloc(g_rows * sizeof(Cell *));
   if (!g_grid) {
     log_fs_error("Failed to allocate memory for grid");
@@ -96,13 +93,11 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  /* Set header row */
   set_cell(0, 0, "File");
   set_cell(0, 1, "Size (bytes)");
   set_cell(0, 2, "Date");
   set_cell(0, 3, "Permissions");
 
-  /* Initialize max column widths from header */
   g_max_col_widths = calloc(g_cols, sizeof(int));
   if (!g_max_col_widths) {
     log_fs_error("Failed to allocate memory for max_col_widths");
@@ -114,7 +109,6 @@ int main(int argc, char *argv[]) {
     g_max_col_widths[c] = g_grid[0][c].text_width;
   }
 
-  /* Create mutex for grid access */
   g_grid_mutex = SDL_CreateMutex();
   if (!g_grid_mutex) {
     log_fs_error("Failed to create mutex: %s", SDL_GetError());
@@ -123,7 +117,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  /* Start filesystem traversal thread */
+  g_vscroll = vscroll_init(g_cols);
+  if (!g_vscroll) {
+    log_fs_error("Failed to initialize virtual scrolling");
+    if (argc == 1)
+      free(dir_path);
+    return 1;
+  }
+
   char *thread_dir = strdup(dir_path);
 
   g_fs_traversing = true;
@@ -140,7 +141,6 @@ int main(int argc, char *argv[]) {
   if (argc == 1)
     free(dir_path);
 
-  /* Create window & renderer */
   SDL_CHECK(SDL_CreateWindowAndRenderer("Directory Listing", 800, 600,
                                         SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                             SDL_WINDOW_FULLSCREEN |
@@ -148,25 +148,30 @@ int main(int argc, char *argv[]) {
                                         &g_window, &g_renderer),
             "Window and renderer creation failed");
 
-  /* Initialize smooth scroll targets to current offsets */
   g_scroll_target_x = g_offset_x;
   g_scroll_target_y = g_offset_y;
 
   bool running = true;
 
   SDL_Event event;
-  const int frame_delay_ms = 16; /* ~60 FPS */
+  const int frame_delay_ms = 16;
 
-  /* Main loop: poll events and update display */
   while (running) {
-    /* Get current window size and compute layout */
     int win_w_local = 0, win_h_local = 0;
     SDL_GetWindowSize(g_window, &win_w_local, &win_h_local);
     SDL_LockMutex(g_grid_mutex);
 
     SizeAlloc sa = sizeAllocate(win_w_local, win_h_local);
 
-    /* Update global copies used by event handlers */
+    g_vscroll->total_virtual_rows = g_rows;
+    vscroll_update_buffer_position(g_vscroll, g_view_y, g_content_h,
+                                   sa.row_height);
+
+    if (g_vscroll->needs_reload) {
+      vscroll_load_from_grid(g_vscroll, g_vscroll->desired_start_row,
+                             VSCROLL_BUFFER_SIZE);
+    }
+
     g_need_horz = sa.need_horz;
     g_need_vert = sa.need_vert;
     g_total_grid_w = sa.total_grid_w;
@@ -174,12 +179,8 @@ int main(int argc, char *argv[]) {
     g_content_w = sa.content_w;
     g_content_h = sa.content_h;
 
-    /* NEW: store row_height and copy column geometry to globals for hit-testing
-     */
     g_row_height = sa.row_height;
 
-    /* copy col widths & left positions into globals (replace previous arrays)
-     */
     if (g_col_left) {
       free(g_col_left);
       g_col_left = NULL;
@@ -197,8 +198,6 @@ int main(int argc, char *argv[]) {
           g_col_widths[c] = sa.col_widths[c];
         }
       } else {
-        /* allocation failure — free any partials and set to NULL (best effort)
-         */
         if (g_col_left) {
           free(g_col_left);
           g_col_left = NULL;
@@ -210,25 +209,20 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    /* Process all pending events */
     while (SDL_PollEvent(&event)) {
       if (handle_events(&event, win_w_local, win_h_local)) {
         running = false;
       }
     }
 
-    /* Update scrolling */
     update_scroll();
 
-    /* Draw frame using the precomputed layout */
     draw_with_alloc(&sa);
 
-    /* Free the arrays allocated by sizeAllocate */
     free(sa.col_widths);
     free(sa.col_left);
     SDL_UnlockMutex(g_grid_mutex);
 
-    /* Cap frame rate */
     SDL_Delay(frame_delay_ms);
   }
 

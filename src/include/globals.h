@@ -1,6 +1,8 @@
+/* include/globals.h */
 #pragma once
 
 #include "types.h"
+#include "virtual_scroll.h"
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <stdio.h>
@@ -52,18 +54,19 @@ extern bool g_fs_traversing;
 /* Stop flag for traversal */
 extern volatile bool g_stop;
 
-/* NEW: selection state (indexing) */
-/* g_selected_row, g_selected_col — coordinates of selected cell (or -1 if
-   none). g_selected_index = g_selected_row * g_cols + g_selected_col (or -1).
- */
+/* Selection state (indexing) */
 extern int g_selected_row;
 extern int g_selected_col;
 extern int g_selected_index;
 
-/* NEW: row height and column geometry cached for event hit-testing */
+/* Row height and column geometry cached for event hit-testing */
 extern float g_row_height;
-extern float *g_col_left; /* float array length g_cols */
-extern int *g_col_widths; /* int array length g_cols */
+extern float *g_col_left;
+extern int *g_col_widths;
+
+/* Virtual scrolling */
+extern VirtualScrollState *g_vscroll;
+extern float g_last_content_h;
 
 /* Prototypes */
 void cleanup(void);
