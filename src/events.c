@@ -1,4 +1,3 @@
-/* src/events.c */
 #include "include/events.h"
 #include "include/config.h"
 #include "include/globals.h"
@@ -145,7 +144,7 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
       float content_w_local = g_content_w;
       float content_h_local = g_content_h;
 
-      /* Vertical scrollbar thumb hit test */
+      /* Vertical scrollbar hit test */
       if (g_need_vert) {
         float vert_bar_x = view_x_local + content_w_local;
         float vert_bar_y = view_y_local;
@@ -159,17 +158,44 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
         } else {
           thumb_y = vert_bar_y + (g_offset_y / denom) * (vert_bar_h - thumb_h);
         }
+
+        /* Проверяем клик по всему бару */
         if (mx >= (int)vert_bar_x && mx < (int)(vert_bar_x + SCROLLBAR_WIDTH) &&
-            my >= (int)thumb_y && my < (int)(thumb_y + thumb_h)) {
-          g_dragging_vert = true;
-          g_drag_start_pos = my;
-          g_drag_start_offset = g_offset_y;
-          g_scroll_target_y = g_offset_y;
+            my >= (int)vert_bar_y && my < (int)(vert_bar_y + vert_bar_h)) {
+
+          /* Клик по ползунку - начинаем драг */
+          if (my >= (int)thumb_y && my < (int)(thumb_y + thumb_h)) {
+            g_dragging_vert = true;
+            g_drag_start_pos = my;
+            g_drag_start_offset = g_offset_y;
+            g_scroll_target_y = g_offset_y;
+          } else {
+            /* Клик по треку - перемещаем центр ползунка в точку клика */
+            float click_pos = my - vert_bar_y;
+            float track_h = vert_bar_h - thumb_h;
+
+            /* Вычисляем желаемую позицию центра ползунка */
+            float desired_thumb_center = click_pos;
+
+            /* Ограничиваем, чтобы ползунок не выходил за пределы */
+            float thumb_center_min = thumb_h / 2.0f;
+            float thumb_center_max = vert_bar_h - thumb_h / 2.0f;
+            desired_thumb_center = SDL_clamp(
+                desired_thumb_center, thumb_center_min, thumb_center_max);
+
+            /* Преобразуем в offset */
+            float desired_thumb_top = desired_thumb_center - thumb_h / 2.0f;
+            if (track_h > 0.0f && denom > 0.0f) {
+              g_offset_y = (desired_thumb_top / track_h) * denom;
+              g_scroll_target_y = g_offset_y;
+              scroll_clamp_all();
+            }
+          }
           return quit;
         }
       }
 
-      /* Horizontal scrollbar thumb hit test */
+      /* Horizontal scrollbar hit test */
       if (g_need_horz) {
         float horz_bar_x = view_x_local;
         float horz_bar_y = view_y_local + content_h_local;
@@ -183,12 +209,39 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
         } else {
           thumb_x = horz_bar_x + (g_offset_x / denom) * (horz_bar_w - thumb_w);
         }
-        if (mx >= (int)thumb_x && mx < (int)(thumb_x + thumb_w) &&
+
+        /* Проверяем клик по всему бару */
+        if (mx >= (int)horz_bar_x && mx < (int)(horz_bar_x + horz_bar_w) &&
             my >= (int)horz_bar_y && my < (int)(horz_bar_y + SCROLLBAR_WIDTH)) {
-          g_dragging_horz = true;
-          g_drag_start_pos = mx;
-          g_drag_start_offset = g_offset_x;
-          g_scroll_target_x = g_offset_x;
+
+          /* Клик по ползунку - начинаем драг */
+          if (mx >= (int)thumb_x && mx < (int)(thumb_x + thumb_w)) {
+            g_dragging_horz = true;
+            g_drag_start_pos = mx;
+            g_drag_start_offset = g_offset_x;
+            g_scroll_target_x = g_offset_x;
+          } else {
+            /* Клик по треку - перемещаем центр ползунка в точку клика */
+            float click_pos = mx - horz_bar_x;
+            float track_w = horz_bar_w - thumb_w;
+
+            /* Вычисляем желаемую позицию центра ползунка */
+            float desired_thumb_center = click_pos;
+
+            /* Ограничиваем, чтобы ползунок не выходил за пределы */
+            float thumb_center_min = thumb_w / 2.0f;
+            float thumb_center_max = horz_bar_w - thumb_w / 2.0f;
+            desired_thumb_center = SDL_clamp(
+                desired_thumb_center, thumb_center_min, thumb_center_max);
+
+            /* Преобразуем в offset */
+            float desired_thumb_left = desired_thumb_center - thumb_w / 2.0f;
+            if (track_w > 0.0f && denom > 0.0f) {
+              g_offset_x = (desired_thumb_left / track_w) * denom;
+              g_scroll_target_x = g_offset_x;
+              scroll_clamp_all();
+            }
+          }
           return quit;
         }
       }

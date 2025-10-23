@@ -1,4 +1,3 @@
-/* src/grid.c */
 #include "include/grid.h"
 #include "include/config.h"
 #include "include/globals.h"
@@ -177,8 +176,16 @@ void draw_with_alloc(const SizeAlloc *sa) {
       g_selected_row < g_rows && g_selected_col < g_cols && g_col_left &&
       g_col_widths) {
 
+    /* ИСПРАВЛЕНИЕ: используем относительные координаты */
+    int first_visible_row = (int)floorf(g_offset_y / row_full);
+    float offset_within_first = fmodf(g_offset_y, row_full);
+    if (offset_within_first < 0.0f)
+      offset_within_first += row_full;
+    int row_offset_from_first = g_selected_row - first_visible_row;
+
     float cell_x = view_x - g_offset_x + g_col_left[g_selected_col];
-    float cell_y = view_y - g_offset_y + g_selected_row * row_full;
+    float cell_y =
+        view_y + row_offset_from_first * row_full - offset_within_first;
     float cell_wd = (float)g_col_widths[g_selected_col];
     float cell_hh = sa->row_height;
 
@@ -209,9 +216,20 @@ void draw_with_alloc(const SizeAlloc *sa) {
     if (g_vscroll->needs_reload)
       goto skip_text_render;
 
+    /* Вычисляем первый видимый ряд для относительных координат */
+    int first_visible_row = (int)floorf(g_offset_y / row_full);
+    float offset_within_first = fmodf(g_offset_y, row_full);
+    if (offset_within_first < 0.0f)
+      offset_within_first += row_full;
+
     for (int buf_idx = 0; buf_idx < g_vscroll->buffer_count; buf_idx++) {
       int virtual_row = g_vscroll->buffer_start_row + buf_idx;
-      float cell_y = view_y - g_offset_y + virtual_row * row_full;
+
+      /* ИСПРАВЛЕНИЕ: считаем координаты относительно viewport,
+         а не умножаем virtual_row на большие числа */
+      int row_offset_from_first = virtual_row - first_visible_row;
+      float cell_y =
+          view_y + row_offset_from_first * row_full - offset_within_first;
 
       if (cell_y + cell_h < view_y || cell_y > view_y + content_h)
         continue;

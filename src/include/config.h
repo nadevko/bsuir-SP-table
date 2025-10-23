@@ -21,16 +21,30 @@
 #define BATCH_SIZE 100
 
 /* Permissions format */
-#define PERM_SYMBOLIC 0
-#define PERM_NUMERIC 1
+#define PERM_NUMERIC 0
+#define PERM_SYMBOLIC 1
 #define PERM_FORMAT PERM_SYMBOLIC
-#define SHOW_FILE_RELATIVE_PATH
 
-#define SHOW_FILE_TYPE 1
-#define SHORTENED_EXTRA_BITS 0
-#define ADD_PERMISSIONS_WHITESPACES 1
+/* Template for PERM_SYMBOLIC format:
+ * %T - file type (d/l/-/c/b/p/s/?)
+ * %S - special bits separate (--- to sst)
+ * %u - user permissions (rwx)
+ * %g - group permissions (rwx)
+ * %o - other permissions (rwx)
+ * %U - user with embedded setuid (rws/rwS)
+ * %G - group with embedded setgid (rws/rwS)
+ * %O - other with embedded sticky (rwt/rwT)
+ *
+ * Examples:
+ * "%T%U%G%O"        -> "drwsr-xr-t"  (classic ls -l)
+ * "%S %T%u %g %o"   -> "s-- drwx r-x r--"
+ * "%T%u%g%o"        -> "drwxr-xr--"  (no special bits)
+ * "%u%g%o"          -> "rwxr-xr--"   (no type)
+ */
+#define PERM_TEMPLATE "%S %T %u %g %o"
 
-/* --- remaining original config --- */
+// #define SHOW_FILE_RELATIVE_PATH
+
 #define WITH_BORDER
 #define BORDER_COLOUR (SDL_Color){100, 100, 100, 255}
 #define BORDER_WIDTH 2
@@ -48,7 +62,6 @@
 #define HIGHLIGHT_BORDER_WIDTH 3
 
 #define WITH_FONTCONFIG
-#define RECURSIVE_LISTING
 
 #define LEFT 0
 #define CENTER 1

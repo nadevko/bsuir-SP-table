@@ -100,85 +100,92 @@ static void format_perms(mode_t mode, char *buf, size_t len) {
 #if PERM_FORMAT == PERM_NUMERIC
   snprintf(buf, len, "%04o", (unsigned)(mode & 07777));
 #else
+  const char *template = PERM_TEMPLATE;
   int idx = 0;
-  char user[4], group[4], other[4];
 
-  user[0] = (mode & S_IRUSR) ? 'r' : '-';
-  user[1] = (mode & S_IWUSR) ? 'w' : '-';
-  user[2] = (mode & S_IXUSR) ? 'x' : '-';
-  user[3] = '\0';
+  for (const char *p = template; *p && idx < (int)len - 1; p++) {
+    if (*p == '%' && *(p + 1)) {
+      p++; // skip %
+      switch (*p) {
+      case 'T': // file type
+        if (S_ISDIR(mode))
+          buf[idx++] = 'd';
+        else if (S_ISLNK(mode))
+          buf[idx++] = 'l';
+        else if (S_ISREG(mode))
+          buf[idx++] = '-';
+        else if (S_ISCHR(mode))
+          buf[idx++] = 'c';
+        else if (S_ISBLK(mode))
+          buf[idx++] = 'b';
+        else if (S_ISFIFO(mode))
+          buf[idx++] = 'p';
+        else if (S_ISSOCK(mode))
+          buf[idx++] = 's';
+        else
+          buf[idx++] = '?';
+        break;
 
-  group[0] = (mode & S_IRGRP) ? 'r' : '-';
-  group[1] = (mode & S_IWGRP) ? 'w' : '-';
-  group[2] = (mode & S_IXGRP) ? 'x' : '-';
-  group[3] = '\0';
+      case 'S': // special bits separate
+        buf[idx++] = (mode & S_ISUID) ? ((mode & S_IXUSR) ? 's' : 'S') : '-';
+        buf[idx++] = (mode & S_ISGID) ? ((mode & S_IXGRP) ? 's' : 'S') : '-';
+        buf[idx++] = (mode & S_ISVTX) ? ((mode & S_IXOTH) ? 't' : 'T') : '-';
+        break;
 
-  other[0] = (mode & S_IROTH) ? 'r' : '-';
-  other[1] = (mode & S_IWOTH) ? 'w' : '-';
-  other[2] = (mode & S_IXOTH) ? 'x' : '-';
-  other[3] = '\0';
+      case 'u': // user rwx
+        buf[idx++] = (mode & S_IRUSR) ? 'r' : '-';
+        buf[idx++] = (mode & S_IWUSR) ? 'w' : '-';
+        buf[idx++] = (mode & S_IXUSR) ? 'x' : '-';
+        break;
 
-  char extra[4] = {'-', '-', '-', '\0'};
-  if (mode & S_ISUID)
-    extra[0] = (mode & S_IXUSR) ? 's' : 'S';
-  if (mode & S_ISGID)
-    extra[1] = (mode & S_IXGRP) ? 's' : 'S';
-  if (mode & S_ISVTX)
-    extra[2] = (mode & S_IXOTH) ? 't' : 'T';
+      case 'g': // group rwx
+        buf[idx++] = (mode & S_IRGRP) ? 'r' : '-';
+        buf[idx++] = (mode & S_IWGRP) ? 'w' : '-';
+        buf[idx++] = (mode & S_IXGRP) ? 'x' : '-';
+        break;
 
-#if SHORTENED_EXTRA_BITS
-  if (mode & S_ISUID)
-    user[2] = (mode & S_IXUSR) ? 's' : 'S';
-  if (mode & S_ISGID)
-    group[2] = (mode & S_IXGRP) ? 's' : 'S';
-  if (mode & S_ISVTX)
-    other[2] = (mode & S_IXOTH) ? 't' : 'T';
-#endif
+      case 'o': // other rwx
+        buf[idx++] = (mode & S_IROTH) ? 'r' : '-';
+        buf[idx++] = (mode & S_IWOTH) ? 'w' : '-';
+        buf[idx++] = (mode & S_IXOTH) ? 'x' : '-';
+        break;
 
-#if !SHORTENED_EXTRA_BITS
-  buf[idx++] = extra[0];
-  buf[idx++] = extra[1];
-  buf[idx++] = extra[2];
-#if ADD_PERMISSIONS_WHITESPACES
-  buf[idx++] = ' ';
-#endif
-#endif
+      case 'U': // user with embedded setuid
+        buf[idx++] = (mode & S_IRUSR) ? 'r' : '-';
+        buf[idx++] = (mode & S_IWUSR) ? 'w' : '-';
+        if (mode & S_ISUID)
+          buf[idx++] = (mode & S_IXUSR) ? 's' : 'S';
+        else
+          buf[idx++] = (mode & S_IXUSR) ? 'x' : '-';
+        break;
 
-  if (SHOW_FILE_TYPE) {
-    if (S_ISDIR(mode))
-      buf[idx++] = 'd';
-    else if (S_ISLNK(mode))
-      buf[idx++] = 'l';
-    else if (S_ISREG(mode))
-      buf[idx++] = '-';
-    else if (S_ISCHR(mode))
-      buf[idx++] = 'c';
-    else if (S_ISBLK(mode))
-      buf[idx++] = 'b';
-    else if (S_ISFIFO(mode))
-      buf[idx++] = 'p';
-    else if (S_ISSOCK(mode))
-      buf[idx++] = 's';
-    else
-      buf[idx++] = '?';
+      case 'G': // group with embedded setgid
+        buf[idx++] = (mode & S_IRGRP) ? 'r' : '-';
+        buf[idx++] = (mode & S_IWGRP) ? 'w' : '-';
+        if (mode & S_ISGID)
+          buf[idx++] = (mode & S_IXGRP) ? 's' : 'S';
+        else
+          buf[idx++] = (mode & S_IXGRP) ? 'x' : '-';
+        break;
+
+      case 'O': // other with embedded sticky
+        buf[idx++] = (mode & S_IROTH) ? 'r' : '-';
+        buf[idx++] = (mode & S_IWOTH) ? 'w' : '-';
+        if (mode & S_ISVTX)
+          buf[idx++] = (mode & S_IXOTH) ? 't' : 'T';
+        else
+          buf[idx++] = (mode & S_IXOTH) ? 'x' : '-';
+        break;
+
+      default:
+        buf[idx++] = '%';
+        buf[idx++] = *p;
+        break;
+      }
+    } else {
+      buf[idx++] = *p; // literal character
+    }
   }
-
-  for (int i = 0; i < 3; ++i)
-    buf[idx++] = user[i];
-
-#if ADD_PERMISSIONS_WHITESPACES
-  buf[idx++] = ' ';
-#endif
-
-  for (int i = 0; i < 3; ++i)
-    buf[idx++] = group[i];
-
-#if ADD_PERMISSIONS_WHITESPACES
-  buf[idx++] = ' ';
-#endif
-
-  for (int i = 0; i < 3; ++i)
-    buf[idx++] = other[i];
 
   buf[idx] = '\0';
 #endif
