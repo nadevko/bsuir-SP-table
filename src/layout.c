@@ -6,6 +6,12 @@
 #include <math.h>
 #include <stdlib.h>
 
+/* Флаг: если 1 — распределять оставшееся горизонтальное пространство
+ * поровну между столбцами. Можно переопределить в config.h */
+#ifndef EXPAND_COLUMNS_TO_FILL
+#define EXPAND_COLUMNS_TO_FILL 1
+#endif
+
 SizeAlloc sizeAllocate(int win_w, int win_h) {
   SizeAlloc sa;
   sa.col_widths = NULL;
@@ -117,6 +123,56 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
   sa.need_vert = need_vert;
   sa.total_grid_h = total_grid_h;
   sa.row_height = row_h;
+
+  /* Если включена опция — расширяем начальные ширины столбцов,
+   * чтобы занять свободное горизонтальное пространство ровно. */
+#if EXPAND_COLUMNS_TO_FILL
+  if (g_cols > 0) {
+    float line_w = GRID_LINE_WIDTH;
+    /* текущее total_grid_w учитывает ширины + межколоночные линии */
+    float current_total_w = 0.0f;
+    for (int c = 0; c < g_cols; c++)
+      current_total_w += sa.col_widths[c];
+    current_total_w += (g_cols > 0 ? (g_cols - 1) * line_w : 0.0f);
+
+    /* content_w уже посчитан (с учётом полос прокрутки) */
+    float extra_f = sa.content_w - current_total_w;
+    if (extra_f > 1.0f) {
+      /* распределяем целые пиксели */
+      int extra = (int)floorf(extra_f);
+      int add_each = extra / g_cols;
+      int remainder = extra - add_each * g_cols;
+      for (int c = 0; c < g_cols; c++) {
+        sa.col_widths[c] += add_each;
+      }
+      for (int c = 0; c < remainder; c++) {
+        sa.col_widths[c] += 1;
+      }
+      /* обновим total_grid_w */
+      sa.total_grid_w = 0.0f;
+      for (int c = 0; c < g_cols; c++)
+        sa.total_grid_w += sa.col_widths[c];
+      sa.total_grid_w += (g_cols > 0 ? (g_cols - 1) * line_w : 0.0f);
+    } else {
+      /* если не расширяли, сохранить sa.total_grid_w как было */
+      sa.total_grid_w = current_total_w;
+      sa.total_grid_w += (g_cols > 0 ? (g_cols - 1) * line_w : 0.0f);
+    }
+  } else {
+    /* EXPAND_COLUMNS_TO_FILL выключен — восстановим total_grid_w как рассчитано
+     * изначально */
+    sa.total_grid_w = 0.0f;
+    for (int c = 0; c < g_cols; c++)
+      sa.total_grid_w += sa.col_widths[c];
+    sa.total_grid_w += (g_cols > 0 ? (g_cols - 1) * GRID_LINE_WIDTH : 0.0f);
+  }
+#else
+  /* без расширения — просто пересчитываем total_grid_w на всякий случай */
+  sa.total_grid_w = 0.0f;
+  for (int c = 0; c < g_cols; c++)
+    sa.total_grid_w += sa.col_widths[c];
+  sa.total_grid_w += (g_cols > 0 ? (g_cols - 1) * GRID_LINE_WIDTH : 0.0f);
+#endif
 
   sa.col_left = malloc(g_cols * sizeof(float));
   if (g_cols > 0)
