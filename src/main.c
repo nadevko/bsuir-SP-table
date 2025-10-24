@@ -10,6 +10,7 @@
 #include "include/virtual_scroll.h"
 #include <errno.h>
 #include <fontconfig/fontconfig.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,10 +32,23 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  /* --- Включаем локаль из окружения. Это обязательно, чтобы strftime()
+   *     использовал локализованные названия месяцев/дней и формат %c.
+   *     Должно быть выполнено ДО создания потоков и ДО вызовов, зависящих
+   *     от локали. */
+  char *loc = setlocale(LC_ALL, "");
+  if (!loc) {
+    fprintf(stderr,
+            "Warning: setlocale(LC_ALL, \"\") failed — using \"C\" locale\n");
+  } else {
+    fprintf(stderr, "Locale set to: %s\n", loc);
+  }
+
   init_fs_log();
 
   g_cols = DEFAULT_COLS;
-  g_rows = 1;
+  g_rows = 1; /* Начинаем с 1 строки - заголовок */
+  fprintf(stderr, "INIT: g_rows = %d (header row)\n", g_rows);
   atexit(cleanup);
 
   SDL_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL initialisation failed");
@@ -93,7 +107,42 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  set_cell(0, 0, "File");
+  /* Заголовок: показываем канонический путь (реальный путь). */
+  char *resolved = realpath(dir_path, NULL);
+  if (!resolved) {
+    resolved = strdup(dir_path ? dir_path : ".");
+    if (!resolved) {
+      log_fs_error("Failed to allocate memory for resolved path");
+      set_cell(0, 0, "File");
+    } else {
+      size_t len = strlen(resolved) + 12; /* "File at ()\0" запас */
+      char *header = malloc(len);
+      if (!header) {
+        log_fs_error("Failed to allocate memory for header");
+        set_cell(0, 0, "File");
+        free(resolved);
+      } else {
+        snprintf(header, len, "File at %s", resolved);
+        set_cell(0, 0, header);
+        free(header);
+        free(resolved);
+      }
+    }
+  } else {
+    size_t len = strlen(resolved) + 12;
+    char *header = malloc(len);
+    if (!header) {
+      log_fs_error("Failed to allocate memory for header");
+      set_cell(0, 0, "File");
+      free(resolved);
+    } else {
+      snprintf(header, len, "File at %s", resolved);
+      set_cell(0, 0, header);
+      free(header);
+      free(resolved);
+    }
+  }
+
   set_cell(0, 1, "Size (bytes)");
   set_cell(0, 2, "Date");
   set_cell(0, 3, "Permissions");
@@ -163,7 +212,13 @@ int main(int argc, char *argv[]) {
 
     SizeAlloc sa = sizeAllocate(win_w_local, win_h_local);
 
-    g_vscroll->total_virtual_rows = g_rows;
+    /* КРИТИЧЕСКАЯ СИНХРОНИЗАЦИЯ: virtual scroll должен знать точное кол-во
+     * строк */
+    if (g_vscroll->total_virtual_rows != g_rows) {
+      fprintf(stderr, "SYNC ERROR: vscroll thinks %d rows, but g_rows=%d\n",
+              g_vscroll->total_virtual_rows, g_rows);
+      g_vscroll->total_virtual_rows = g_rows;
+    }
     vscroll_update_buffer_position(g_vscroll, g_view_y, g_content_h,
                                    sa.row_height);
 

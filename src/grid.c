@@ -1,3 +1,4 @@
+/* src/grid.c */
 #include "include/grid.h"
 #include "include/config.h"
 #include "include/globals.h"
@@ -26,6 +27,10 @@ void draw_with_alloc(const SizeAlloc *sa) {
   float cell_h = sa->row_height;
   float row_full = cell_h + line_w;
 
+  /* КРИТИЧЕСКИ ВАЖНО: max_offset должен учитывать реальную высоту контента!
+     total_grid_h = g_rows * cell_h + (g_rows-1) * line_w
+     Это высота от верха первой строки до низа последней.
+     max_offset_y = то, насколько можно прокрутить = total_grid_h - content_h */
   float max_offset_x = SDL_max(0.0f, sa->total_grid_w - content_w);
   float max_offset_y = SDL_max(0.0f, sa->total_grid_h - content_h);
 
@@ -55,7 +60,16 @@ void draw_with_alloc(const SizeAlloc *sa) {
     int rows_needed = (int)ceilf((content_h + offset_mod) / row_full) + 1;
     SDL_FRect *horz_rects = malloc(rows_needed * sizeof(SDL_FRect));
     int horz_count = 0;
+
+    /* ИСПРАВЛЕНИЕ: определяем первую видимую строку */
+    int first_visible_row = (int)floorf(g_offset_y / row_full);
+
     for (int i = 0; i < rows_needed; i++) {
+      int current_row = first_visible_row + i;
+      /* Не рисуем линию после последней строки */
+      if (current_row >= g_rows)
+        break;
+
       float sep_y = first_row_top_y + i * row_full + cell_h;
       if (sep_y + line_w < view_y || sep_y > view_y + content_h)
         continue;
@@ -103,8 +117,9 @@ void draw_with_alloc(const SizeAlloc *sa) {
 #else
   SDL_FRect *horz_rects = malloc((g_rows) * sizeof(SDL_FRect));
   int horz_count = 0;
+  /* ИСПРАВЛЕНИЕ: рисуем только линии между строками (не после последней) */
   for (int i = 1; i < g_rows; i++) {
-    float line_y = view_y - g_offset_y + i * cell_h + (i - 1) * line_w;
+    float line_y = view_y - g_offset_y + i * row_full - line_w;
     if (line_y >= view_y && line_y <= view_y + content_h) {
 #if FULL_WIDTH_HORIZ_LINES
       float w = content_w;
@@ -115,17 +130,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
     }
   }
 
-  {
-    float bottom_y = view_y - g_offset_y + sa->total_grid_h;
-    if (bottom_y >= view_y && bottom_y <= view_y + content_h) {
-#if FULL_WIDTH_HORIZ_LINES
-      float w = content_w;
-#else
-      float w = SDL_min(content_w, sa->total_grid_w);
-#endif
-      horz_rects[horz_count++] = (SDL_FRect){view_x, bottom_y, w, line_w};
-    }
-  }
+  /* НЕ рисуем линию после последней строки - её там нет! */
 
   float grid_top = view_y - g_offset_y;
   float grid_bottom = grid_top + sa->total_grid_h;

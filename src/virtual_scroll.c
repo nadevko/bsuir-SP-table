@@ -91,6 +91,10 @@ void vscroll_update_buffer_position(VirtualScrollState *vs, float view_y,
   int first_visible_row = (int)floorf(g_offset_y / row_full);
   if (first_visible_row < 0)
     first_visible_row = 0;
+  /* ЗАЩИТА: не можем начинать дальше последней строки */
+  if (first_visible_row >= vs->total_virtual_rows)
+    first_visible_row =
+        vs->total_virtual_rows > 0 ? vs->total_virtual_rows - 1 : 0;
 
   int visible_count = (int)ceilf(content_h / row_full) + 1;
   int prefetch_before = VSCROLL_PREFETCH;

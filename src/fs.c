@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,10 +81,10 @@ static void add_file(const char *display_name, const char *size_str,
     flush_batch();
   }
 
-  batch[batch_count].display_name = strdup(display_name);
-  batch[batch_count].size_str = strdup(size_str);
-  batch[batch_count].date_str = strdup(date_str);
-  batch[batch_count].perm_str = strdup(perm_str);
+  batch[batch_count].display_name = strdup(display_name ? display_name : "");
+  batch[batch_count].size_str = strdup(size_str ? size_str : "");
+  batch[batch_count].date_str = strdup(date_str ? date_str : "");
+  batch[batch_count].perm_str = strdup(perm_str ? perm_str : "");
   batch_count++;
 }
 
@@ -91,9 +92,39 @@ static void format_size(off_t size, char *buf, size_t len) {
   snprintf(buf, len, "%lld", (long long)size);
 }
 
+/* format_date:
+ * - Uses DATE_FORMAT_TEMPLATE from config.h. If it's empty, falls back to "%c".
+ * - Uses localtime_r for thread-safety.
+ * - Ensures buffer is NUL-terminated.
+ *
+ * NOTE: strftime uses the process locale (LC_TIME). Make sure setlocale()
+ * is called in main() before worker threads are started.
+ */
 static void format_date(time_t mtime, char *buf, size_t len) {
-  struct tm *tm = localtime(&mtime);
-  strftime(buf, len, "%d.%m.%Y", tm);
+  if (buf == NULL || len == 0)
+    return;
+
+  struct tm tm_buf;
+  struct tm *tmres = localtime_r(&mtime, &tm_buf);
+  if (!tmres) {
+    /* Failed to convert time; print numeric epoch as fallback */
+    snprintf(buf, len, "%lld", (long long)mtime);
+    return;
+  }
+
+  const char *fmt = DATE_FORMAT_TEMPLATE;
+  if (!fmt || fmt[0] == '\0') {
+    fmt = "%c";
+  }
+
+  size_t wrote = strftime(buf, len, fmt, &tm_buf);
+  if (wrote == 0) {
+    /* Fallback: localized default */
+    if (strftime(buf, len, "%c", &tm_buf) == 0) {
+      /* Last resort: numeric epoch */
+      snprintf(buf, len, "%lld", (long long)mtime);
+    }
+  }
 }
 
 static void format_perms(mode_t mode, char *buf, size_t len) {
@@ -105,9 +136,9 @@ static void format_perms(mode_t mode, char *buf, size_t len) {
 
   for (const char *p = template; *p && idx < (int)len - 1; p++) {
     if (*p == '%' && *(p + 1)) {
-      p++; // skip %
+      p++; /* skip % */
       switch (*p) {
-      case 'T': // file type
+      case 'T': /* file type */
         if (S_ISDIR(mode))
           buf[idx++] = 'd';
         else if (S_ISLNK(mode))
@@ -126,51 +157,69 @@ static void format_perms(mode_t mode, char *buf, size_t len) {
           buf[idx++] = '?';
         break;
 
-      case 'S': // special bits separate
-        buf[idx++] = (mode & S_ISUID) ? ((mode & S_IXUSR) ? 's' : 'S') : '-';
-        buf[idx++] = (mode & S_ISGID) ? ((mode & S_IXGRP) ? 's' : 'S') : '-';
-        buf[idx++] = (mode & S_ISVTX) ? ((mode & S_IXOTH) ? 't' : 'T') : '-';
+      case 'S': /* special bits separate */
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_ISUID) ? ((mode & S_IXUSR) ? 's' : 'S') : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_ISGID) ? ((mode & S_IXGRP) ? 's' : 'S') : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_ISVTX) ? ((mode & S_IXOTH) ? 't' : 'T') : '-';
         break;
 
-      case 'u': // user rwx
-        buf[idx++] = (mode & S_IRUSR) ? 'r' : '-';
-        buf[idx++] = (mode & S_IWUSR) ? 'w' : '-';
-        buf[idx++] = (mode & S_IXUSR) ? 'x' : '-';
+      case 'u': /* user rwx */
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IRUSR) ? 'r' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IWUSR) ? 'w' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IXUSR) ? 'x' : '-';
         break;
 
-      case 'g': // group rwx
-        buf[idx++] = (mode & S_IRGRP) ? 'r' : '-';
-        buf[idx++] = (mode & S_IWGRP) ? 'w' : '-';
-        buf[idx++] = (mode & S_IXGRP) ? 'x' : '-';
+      case 'g': /* group rwx */
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IRGRP) ? 'r' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IWGRP) ? 'w' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IXGRP) ? 'x' : '-';
         break;
 
-      case 'o': // other rwx
-        buf[idx++] = (mode & S_IROTH) ? 'r' : '-';
-        buf[idx++] = (mode & S_IWOTH) ? 'w' : '-';
-        buf[idx++] = (mode & S_IXOTH) ? 'x' : '-';
+      case 'o': /* other rwx */
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IROTH) ? 'r' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IWOTH) ? 'w' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IXOTH) ? 'x' : '-';
         break;
 
-      case 'U': // user with embedded setuid
-        buf[idx++] = (mode & S_IRUSR) ? 'r' : '-';
-        buf[idx++] = (mode & S_IWUSR) ? 'w' : '-';
+      case 'U': /* user with embedded setuid */
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IRUSR) ? 'r' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IWUSR) ? 'w' : '-';
         if (mode & S_ISUID)
           buf[idx++] = (mode & S_IXUSR) ? 's' : 'S';
         else
           buf[idx++] = (mode & S_IXUSR) ? 'x' : '-';
         break;
 
-      case 'G': // group with embedded setgid
-        buf[idx++] = (mode & S_IRGRP) ? 'r' : '-';
-        buf[idx++] = (mode & S_IWGRP) ? 'w' : '-';
+      case 'G': /* group with embedded setgid */
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IRGRP) ? 'r' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IWGRP) ? 'w' : '-';
         if (mode & S_ISGID)
           buf[idx++] = (mode & S_IXGRP) ? 's' : 'S';
         else
           buf[idx++] = (mode & S_IXGRP) ? 'x' : '-';
         break;
 
-      case 'O': // other with embedded sticky
-        buf[idx++] = (mode & S_IROTH) ? 'r' : '-';
-        buf[idx++] = (mode & S_IWOTH) ? 'w' : '-';
+      case 'O': /* other with embedded sticky */
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IROTH) ? 'r' : '-';
+        if (idx < (int)len - 1)
+          buf[idx++] = (mode & S_IWOTH) ? 'w' : '-';
         if (mode & S_ISVTX)
           buf[idx++] = (mode & S_IXOTH) ? 't' : 'T';
         else
@@ -178,12 +227,14 @@ static void format_perms(mode_t mode, char *buf, size_t len) {
         break;
 
       default:
-        buf[idx++] = '%';
-        buf[idx++] = *p;
+        if (idx < (int)len - 1)
+          buf[idx++] = '%';
+        if (idx < (int)len - 1)
+          buf[idx++] = *p;
         break;
       }
     } else {
-      buf[idx++] = *p; // literal character
+      buf[idx++] = *p; /* literal character */
     }
   }
 
@@ -221,11 +272,11 @@ static void traverse_recursive(const char *dir_path, const char *prefix,
     /* Составляем display_name */
     char display_name[PATH_MAX];
 #ifdef SHOW_FILE_RELATIVE_PATH
-    if (prefix[0] == '\0') {
-      snprintf(display_name, sizeof(display_name), "%s", entry->d_name);
-    } else {
+    if (prefix && prefix[0] != '\0') {
       snprintf(display_name, sizeof(display_name), "%s/%s", prefix,
                entry->d_name);
+    } else {
+      snprintf(display_name, sizeof(display_name), "%s", entry->d_name);
     }
 #else
     snprintf(display_name, sizeof(display_name), "%s", entry->d_name);
@@ -279,8 +330,8 @@ static void traverse_recursive(const char *dir_path, const char *prefix,
 
     if (should_add) {
       char size_str[32];
-      char date_str[16];
-      char perm_str[32];
+      char date_str[64]; /* увеличен размер для разнообразных шаблонов */
+      char perm_str[64];
 
       format_size(size_value, size_str, sizeof(size_str));
       format_date(st.st_mtime, date_str, sizeof(date_str));

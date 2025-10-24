@@ -1,4 +1,3 @@
-// src/scroll.c
 #include "include/scroll.h"
 #include "include/config.h"
 #include "include/globals.h"
@@ -76,20 +75,6 @@ void update_scroll(void) {
      событиями. Тем не менее синхронизируем offset с целью на всякий случай. */
   g_offset_x = g_scroll_target_x;
   g_offset_y = g_scroll_target_y;
-#endif
-
-#if SNAP_VIEW_TO_ROWS
-  /* Снап к краям (как было раньше) */
-  float max_off_y = SDL_max(0.0f, g_total_grid_h - g_content_h);
-  const float snap_eps = 1.0f;
-  if (g_offset_y >= 0.0f && g_offset_y <= snap_eps) {
-    g_offset_y = 0.0f;
-    g_scroll_target_y = 0.0f;
-  }
-  if (fabsf(g_offset_y - max_off_y) <= snap_eps) {
-    g_offset_y = max_off_y;
-    g_scroll_target_y = max_off_y;
-  }
 #endif
 
   /* В конце — гарантируем корректные границы (устраняем возможный drift) */

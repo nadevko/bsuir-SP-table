@@ -9,12 +9,18 @@ static void ensure_cell_visible_and_scroll(int row, int col) {
   if (!g_col_left || !g_col_widths)
     return;
 
+  if (row >= g_rows) {
+    return;
+  }
+
   float cell_x = g_col_left[col];
   float cell_w = (float)g_col_widths[col];
   float line_w = GRID_LINE_WIDTH;
   float cell_h = g_row_height;
-  float cell_y = row * (cell_h + line_w);
-  float cell_h_full = cell_h;
+  float row_full = cell_h + line_w;
+
+  float cell_y = row * row_full;
+  float cell_h_full = cell_h; // только высота ячейки, без линии после
 
   float left = g_offset_x;
   float right = g_offset_x + g_content_w;
@@ -39,6 +45,12 @@ static void ensure_cell_visible_and_scroll(int row, int col) {
   } else if (cell_y + cell_h_full > bottom) {
     desired_target_y = cell_y + cell_h_full - g_content_h;
   }
+
+  float max_target_x = SDL_max(0.0f, g_total_grid_w - g_content_w);
+  float max_target_y = SDL_max(0.0f, g_total_grid_h - g_content_h);
+
+  desired_target_x = SDL_clamp(desired_target_x, 0.0f, max_target_x);
+  desired_target_y = SDL_clamp(desired_target_y, 0.0f, max_target_y);
 
   float dx = desired_target_x - g_scroll_target_x;
   float dy = desired_target_y - g_scroll_target_y;
@@ -118,16 +130,16 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
     float dx = -scroll_factor * event->wheel.x * SCROLL_SPEED;
 
 #if SMOOTH_SCROLL
-    if (g_dragging_vert) {
+    if (g_dragging_vert && g_dragging_horz) {
+      scroll_apply_immediate(dx, dy);
+    } else if (g_dragging_vert) {
       scroll_apply_immediate(0.0f, dy);
-    } else {
-      scroll_add_target(0.0f, dy);
-    }
-
-    if (g_dragging_horz) {
-      scroll_apply_immediate(dx, 0.0f);
-    } else {
       scroll_add_target(dx, 0.0f);
+    } else if (g_dragging_horz) {
+      scroll_apply_immediate(dx, 0.0f);
+      scroll_add_target(0.0f, dy);
+    } else {
+      scroll_add_target(dx, dy);
     }
 #else
     scroll_apply_immediate(dx, dy);
@@ -186,8 +198,15 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
             /* Преобразуем в offset */
             float desired_thumb_top = desired_thumb_center - thumb_h / 2.0f;
             if (track_h > 0.0f && denom > 0.0f) {
-              g_offset_y = (desired_thumb_top / track_h) * denom;
-              g_scroll_target_y = g_offset_y;
+              float new_offset = (desired_thumb_top / track_h) * denom;
+              /* КРИТИЧЕСКИ ВАЖНО: clamp перед установкой! */
+              new_offset = SDL_clamp(new_offset, 0.0f, denom);
+              g_offset_y = new_offset;
+              g_scroll_target_y = new_offset;
+              fprintf(
+                  stderr,
+                  "VSCROLL CLICK: click_pos=%.2f, new_offset=%.2f, max=%.2f\n",
+                  click_pos, new_offset, denom);
               scroll_clamp_all();
             }
           }
@@ -237,8 +256,10 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
             /* Преобразуем в offset */
             float desired_thumb_left = desired_thumb_center - thumb_w / 2.0f;
             if (track_w > 0.0f && denom > 0.0f) {
-              g_offset_x = (desired_thumb_left / track_w) * denom;
-              g_scroll_target_x = g_offset_x;
+              float new_offset = (desired_thumb_left / track_w) * denom;
+              new_offset = SDL_clamp(new_offset, 0.0f, denom);
+              g_offset_x = new_offset;
+              g_scroll_target_x = new_offset;
               scroll_clamp_all();
             }
           }
@@ -276,7 +297,8 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
       if (in_row_y < 0.0f)
         in_row_y += row_full;
 
-      if (in_row_y >= cell_h || row < 0 || row >= g_rows) {
+      /* ИСПРАВЛЕНИЕ: проверяем границы строк и попадание в линию */
+      if (row < 0 || row >= g_rows || in_row_y >= cell_h) {
         g_selected_row = -1;
         g_selected_col = -1;
         g_selected_index = -1;

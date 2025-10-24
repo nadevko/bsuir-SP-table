@@ -82,3 +82,17 @@
 #define SCROLLBAR_THUMB_COLOUR (SDL_Color){100, 100, 100, 255}
 
 #define NATURAL_SCROLL 0
+
+/* DATE_FORMAT_TEMPLATE is a strftime()-style format string used to format
+ * file modification times shown in the grid.
+ *
+ * By default "%c" is used which prints the date/time in the program's locale
+ * (that's what you requested). If you want a custom layout, override this
+ * macro in a build-time header or uncomment and change it here.
+ *
+ * Examples:
+ *  "%Y-%m-%d %H:%M:%S"  -> 2025-10-24 13:45:01
+ *  "%d.%m.%Y"           -> 24.10.2025
+ *  "%c"                 -> locale's date and time representation
+ */
+#define DATE_FORMAT_TEMPLATE "%H:%M:%S %d %B %Y"

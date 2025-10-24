@@ -42,8 +42,13 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
   sa.total_grid_w += (g_cols > 0 ? (g_cols - 1) * line_w : 0.0f);
 
   float row_h = min_cell_h;
-  float total_grid_h =
-      g_rows * row_h + (g_rows > 0 ? (g_rows - 1) * line_w : 0.0f);
+  /* ИСПРАВЛЕНИЕ: высота грида = N строк + (N-1) линий между ними
+     Было: g_rows * row_h + (g_rows - 1) * line_w
+     Это давало лишнее пространство */
+  float total_grid_h = 0.0f;
+  if (g_rows > 0) {
+    total_grid_h = g_rows * row_h + (g_rows - 1) * line_w;
+  }
 
   bool need_horz = false;
   bool need_vert = false;
@@ -93,8 +98,14 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
     row_h = min_cell_h;
 #endif
 
-    float new_total_grid_h =
-        g_rows * row_h + (g_rows > 0 ? (g_rows - 1) * line_w : 0.0f);
+    /* ИСПРАВЛЕНИЕ: правильный расчёт высоты грида
+       Высота = сумма всех ячеек + линии МЕЖДУ ними (не после последней!)
+       N строк = N * cell_h + (N-1) * line_w */
+    float new_total_grid_h = 0.0f;
+    if (g_rows > 0) {
+      new_total_grid_h = g_rows * row_h + (g_rows - 1) * line_w;
+    }
+
     if (fabsf(new_total_grid_h - total_grid_h) < 0.5f) {
       total_grid_h = new_total_grid_h;
       break;
