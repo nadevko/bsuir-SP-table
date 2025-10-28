@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
+/* --- File batch info --- */
 typedef struct {
   char *display_name;
   char *size_str;
@@ -24,6 +25,98 @@ typedef struct {
 static FileInfo batch[BATCH_SIZE];
 static int batch_count = 0;
 
+/* Static storage for original and canonical path used in header substitution */
+static char *fs_orig_path = NULL;
+static char *fs_canon_path = NULL;
+
+/* Helper: dynamic append to buffer */
+static bool buf_append(char **bufp, size_t *cap, size_t *len, const char *src) {
+  if (!src)
+    return true;
+  size_t need = strlen(src);
+  if (*len + need + 1 > *cap) {
+    size_t newcap = (*cap == 0) ? 128 : (*cap * 2);
+    while (newcap < *len + need + 1)
+      newcap *= 2;
+    char *n = realloc(*bufp, newcap);
+    if (!n)
+      return false;
+    *bufp = n;
+    *cap = newcap;
+  }
+  memcpy((*bufp) + *len, src, need);
+  *len += need;
+  (*bufp)[*len] = '\0';
+  return true;
+}
+
+/* Public function: Render a header template with substitutions.
+ * Supported substitutions:
+ *  %% -> %
+ *  %P -> canonical path
+ *  %p -> original path
+ *  %b -> sum of all displayed sizes
+ *  %f -> sum of regular files only
+ *  %d -> actual disk usage
+ *
+ * Returns malloc'd string (caller must free). */
+char *render_header_template(const char *tmpl) {
+  if (!tmpl)
+    return strdup("");
+  char *out = NULL;
+  size_t cap = 0, len = 0;
+
+  for (size_t i = 0; tmpl[i] != '\0'; ++i) {
+    if (tmpl[i] == '%' && tmpl[i + 1] != '\0') {
+      char t = tmpl[++i];
+      if (t == '%') {
+        if (!buf_append(&out, &cap, &len, "%"))
+          goto fail;
+      } else if (t == 'P') {
+        if (!buf_append(&out, &cap, &len, fs_canon_path ? fs_canon_path : ""))
+          goto fail;
+      } else if (t == 'p') {
+        if (!buf_append(&out, &cap, &len, fs_orig_path ? fs_orig_path : ""))
+          goto fail;
+      } else if (t == 'b') {
+        char numbuf[64];
+        snprintf(numbuf, sizeof(numbuf), "%llu",
+                 (unsigned long long)g_total_bytes);
+        if (!buf_append(&out, &cap, &len, numbuf))
+          goto fail;
+      } else if (t == 'f') {
+        char numbuf[64];
+        snprintf(numbuf, sizeof(numbuf), "%llu",
+                 (unsigned long long)g_total_file_bytes);
+        if (!buf_append(&out, &cap, &len, numbuf))
+          goto fail;
+      } else if (t == 'd') {
+        char numbuf[64];
+        snprintf(numbuf, sizeof(numbuf), "%llu",
+                 (unsigned long long)g_total_disk_bytes);
+        if (!buf_append(&out, &cap, &len, numbuf))
+          goto fail;
+      } else {
+        /* unknown escape: output '%' and the char */
+        char tmp[3] = {'%', t, '\0'};
+        if (!buf_append(&out, &cap, &len, tmp))
+          goto fail;
+      }
+    } else {
+      char tmp[2] = {tmpl[i], '\0'};
+      if (!buf_append(&out, &cap, &len, tmp))
+        goto fail;
+    }
+  }
+
+  return out;
+
+fail:
+  free(out);
+  return NULL;
+}
+
+/* --- flush/add batch as before --- */
 static void flush_batch(void) {
   if (batch_count == 0)
     return;
@@ -50,15 +143,11 @@ static void flush_batch(void) {
       continue;
     }
 
+    /* These set_cell calls now automatically update g_max_col_widths */
     set_cell(r, 0, batch[i].display_name);
     set_cell(r, 1, batch[i].size_str);
     set_cell(r, 2, batch[i].date_str);
     set_cell(r, 3, batch[i].perm_str);
-
-    for (int c = 0; c < g_cols; c++) {
-      g_max_col_widths[c] =
-          SDL_max(g_max_col_widths[c], g_grid[r][c].text_width);
-    }
 
     free(batch[i].display_name);
     free(batch[i].size_str);
@@ -75,8 +164,11 @@ static void flush_batch(void) {
   batch_count = 0;
 }
 
+/* add_file: now also receives is_regular_file to distinguish file vs directory
+ * sizes */
 static void add_file(const char *display_name, const char *size_str,
-                     const char *date_str, const char *perm_str) {
+                     const char *date_str, const char *perm_str,
+                     off_t size_value, bool is_regular_file, blkcnt_t blocks) {
   if (batch_count == BATCH_SIZE) {
     flush_batch();
   }
@@ -86,6 +178,18 @@ static void add_file(const char *display_name, const char *size_str,
   batch[batch_count].date_str = strdup(date_str ? date_str : "");
   batch[batch_count].perm_str = strdup(perm_str ? perm_str : "");
   batch_count++;
+
+  /* Update totals and header if needed (under mutex) */
+  if (size_value > 0) {
+    SDL_LockMutex(g_grid_mutex);
+    g_total_bytes += (unsigned long long)size_value;
+    if (is_regular_file) {
+      g_total_file_bytes += (unsigned long long)size_value;
+    }
+    /* Disk usage: st.st_blocks is in 512-byte blocks */
+    g_total_disk_bytes += (unsigned long long)blocks * 512;
+    SDL_UnlockMutex(g_grid_mutex);
+  }
 }
 
 static void format_size(off_t size, char *buf, size_t len) {
@@ -96,9 +200,6 @@ static void format_size(off_t size, char *buf, size_t len) {
  * - Uses DATE_FORMAT_TEMPLATE from config.h. If it's empty, falls back to "%c".
  * - Uses localtime_r for thread-safety.
  * - Ensures buffer is NUL-terminated.
- *
- * NOTE: strftime uses the process locale (LC_TIME). Make sure setlocale()
- * is called in main() before worker threads are started.
  */
 static void format_date(time_t mtime, char *buf, size_t len) {
   if (buf == NULL || len == 0)
@@ -127,10 +228,8 @@ static void format_date(time_t mtime, char *buf, size_t len) {
   }
 }
 
+/* format_perms: unchanged except ensure buffer fits and is NUL-terminated */
 static void format_perms(mode_t mode, char *buf, size_t len) {
-#if PERM_FORMAT == PERM_NUMERIC
-  snprintf(buf, len, "%04o", (unsigned)(mode & 07777));
-#else
   const char *template = PERM_TEMPLATE;
   int idx = 0;
 
@@ -138,6 +237,10 @@ static void format_perms(mode_t mode, char *buf, size_t len) {
     if (*p == '%' && *(p + 1)) {
       p++; /* skip % */
       switch (*p) {
+      case 'n': /* numeric permissions */
+        idx += snprintf(buf + idx, len - idx, "%04o", (unsigned)(mode & 07777));
+        break;
+
       case 'T': /* file type */
         if (S_ISDIR(mode))
           buf[idx++] = 'd';
@@ -239,7 +342,6 @@ static void format_perms(mode_t mode, char *buf, size_t len) {
   }
 
   buf[idx] = '\0';
-#endif
 }
 
 static void traverse_recursive(const char *dir_path, const char *prefix,
@@ -337,7 +439,11 @@ static void traverse_recursive(const char *dir_path, const char *prefix,
       format_date(st.st_mtime, date_str, sizeof(date_str));
       format_perms(st.st_mode, perm_str, sizeof(perm_str));
 
-      add_file(display_name, size_str, date_str, perm_str);
+      /* pass is_regular_file to distinguish file vs directory for size totals
+       */
+      bool is_regular_file = S_ISREG(st.st_mode);
+      add_file(display_name, size_str, date_str, perm_str, size_value,
+               is_regular_file, st.st_blocks);
     }
 
     if (should_recurse) {
@@ -351,6 +457,33 @@ static void traverse_recursive(const char *dir_path, const char *prefix,
 int traverse_fs(void *arg) {
   char *dir_path = (char *)arg;
   batch_count = 0;
+
+  /* Save original path */
+  if (fs_orig_path) {
+    free(fs_orig_path);
+    fs_orig_path = NULL;
+  }
+  fs_orig_path = strdup(dir_path ? dir_path : "");
+
+  /* Compute canonical path once (may be NULL if fails) */
+  if (fs_canon_path) {
+    free(fs_canon_path);
+    fs_canon_path = NULL;
+  }
+  fs_canon_path = realpath(dir_path, NULL);
+  if (!fs_canon_path) {
+    /* fallback to original */
+    fs_canon_path = strdup(fs_orig_path ? fs_orig_path : "");
+  }
+
+  /* Reset total bytes for this traversal */
+  SDL_LockMutex(g_grid_mutex);
+  g_total_bytes = 0ULL;
+  g_total_file_bytes = 0ULL;
+  g_total_disk_bytes = 0ULL;
+  /* Also, set initial headers once (before scanning) */
+  SDL_UnlockMutex(g_grid_mutex);
+
   traverse_recursive(dir_path, "", 0);
   flush_batch();
 
@@ -360,6 +493,17 @@ int traverse_fs(void *arg) {
   }
 
   free(dir_path);
+
+  /* release canonical/orig strings */
+  if (fs_orig_path) {
+    free(fs_orig_path);
+    fs_orig_path = NULL;
+  }
+  if (fs_canon_path) {
+    free(fs_canon_path);
+    fs_canon_path = NULL;
+  }
+
   g_fs_traversing = false;
   return 0;
 }

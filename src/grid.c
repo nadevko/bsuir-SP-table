@@ -51,129 +51,63 @@ void draw_with_alloc(const SizeAlloc *sa) {
   SDL_SetRenderClipRect(g_renderer, &clip_rect);
 
 #ifdef WITH_GRID
-#if GRID_DRAWING_STRATEGY == 0
-  {
-    float offset_mod = fmodf(g_offset_y, row_full);
-    if (offset_mod < 0.0f)
-      offset_mod += row_full;
-    float first_row_top_y = view_y - offset_mod;
-    int rows_needed = (int)ceilf((content_h + offset_mod) / row_full) + 1;
-    SDL_FRect *horz_rects = malloc(rows_needed * sizeof(SDL_FRect));
-    int horz_count = 0;
-
-    /* ИСПРАВЛЕНИЕ: определяем первую видимую строку */
-    int first_visible_row = (int)floorf(g_offset_y / row_full);
-
-    for (int i = 0; i < rows_needed; i++) {
-      int current_row = first_visible_row + i;
-      /* Не рисуем линию после последней строки */
-      if (current_row >= g_rows)
-        break;
-
-      float sep_y = first_row_top_y + i * row_full + cell_h;
-      if (sep_y + line_w < view_y || sep_y > view_y + content_h)
-        continue;
-      horz_rects[horz_count++] = (SDL_FRect){view_x, sep_y, content_w, line_w};
-    }
-    if (horz_count > 0) {
-      SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
-      SDL_RenderFillRects(g_renderer, horz_rects, horz_count);
-    }
-    free(horz_rects);
-  }
-
-  {
-    int max_v_separators = g_cols + 100;
-    SDL_FRect *vert_rects = malloc(max_v_separators * sizeof(SDL_FRect));
-    int vert_count = 0;
-    for (int i = 1; i < g_cols; i++) {
-      float sep_x = view_x - g_offset_x + sa->col_left[i] - line_w;
-      if (sep_x + line_w < view_x || sep_x > view_x + content_w)
-        continue;
-      vert_rects[vert_count++] = (SDL_FRect){sep_x, view_y, line_w, content_h};
-    }
-    if (g_cols > 0) {
-      float last_col_w = sa->col_widths[g_cols - 1];
-      float current_sep_x = view_x - g_offset_x + sa->col_left[g_cols - 1] +
-                            sa->col_widths[g_cols - 1];
-      int guard = 0;
-      while (current_sep_x <= view_x + content_w && guard < 10000) {
-        if (!(current_sep_x + line_w < view_x ||
-              current_sep_x > view_x + content_w)) {
-          vert_rects[vert_count++] =
-              (SDL_FRect){current_sep_x, view_y, line_w, content_h};
-        }
-        current_sep_x += last_col_w + line_w;
-        guard++;
-      }
-    }
-    if (vert_count > 0) {
-      SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
-      SDL_RenderFillRects(g_renderer, vert_rects, vert_count);
-    }
-    free(vert_rects);
-  }
-
-#else
-  SDL_FRect *horz_rects = malloc((g_rows) * sizeof(SDL_FRect));
+  float offset_mod = fmodf(g_offset_y, row_full);
+  if (offset_mod < 0.0f)
+    offset_mod += row_full;
+  float first_row_top_y = view_y - offset_mod;
+  int rows_needed = (int)ceilf((content_h + offset_mod) / row_full) + 1;
+  SDL_FRect *horz_rects = malloc(rows_needed * sizeof(SDL_FRect));
   int horz_count = 0;
-  /* ИСПРАВЛЕНИЕ: рисуем только линии между строками (не после последней) */
-  for (int i = 1; i < g_rows; i++) {
-    float line_y = view_y - g_offset_y + i * row_full - line_w;
-    if (line_y >= view_y && line_y <= view_y + content_h) {
-#if FULL_WIDTH_HORIZ_LINES
-      float w = content_w;
-#else
-      float w = SDL_min(content_w, sa->total_grid_w);
-#endif
-      horz_rects[horz_count++] = (SDL_FRect){view_x, line_y, w, line_w};
-    }
+
+  /* ИСПРАВЛЕНИЕ: определяем первую видимую строку */
+  int first_visible_row = (int)floorf(g_offset_y / row_full);
+
+  for (int i = 0; i < rows_needed; i++) {
+    int current_row = first_visible_row + i;
+    /* Не рисуем линию после последней строки */
+    if (current_row >= g_rows)
+      break;
+
+    float sep_y = first_row_top_y + i * row_full + cell_h;
+    if (sep_y + line_w < view_y || sep_y > view_y + content_h)
+      continue;
+    horz_rects[horz_count++] = (SDL_FRect){view_x, sep_y, content_w, line_w};
   }
-
-  /* НЕ рисуем линию после последней строки - её там нет! */
-
-  float grid_top = view_y - g_offset_y;
-  float grid_bottom = grid_top + sa->total_grid_h;
-  float vis_top = SDL_max(view_y, grid_top);
-  float vis_bottom = SDL_min(view_y + content_h, grid_bottom);
-  float vis_grid_h = vis_bottom - vis_top;
-  if (vis_grid_h < 0.0f)
-    vis_grid_h = 0.0f;
-
-  SDL_FRect *vert_rects = malloc((g_cols + 1) * sizeof(SDL_FRect));
-  int vert_count = 0;
-  for (int i = 1; i < g_cols; i++) {
-    float sep_x = view_x - g_offset_x + sa->col_left[i] - line_w;
-    if (sep_x >= view_x && sep_x <= view_x + content_w) {
-      if (vis_grid_h > 0.0f) {
-        vert_rects[vert_count++] =
-            (SDL_FRect){sep_x, vis_top, line_w, vis_grid_h};
-      }
-    }
-  }
-
-#if FULL_WIDTH_HORIZ_LINES
-  if (g_cols > 0 && vis_grid_h > 0.0f) {
-    float right_x = view_x - g_offset_x + sa->col_left[g_cols - 1] +
-                    sa->col_widths[g_cols - 1];
-    if (right_x >= view_x && right_x <= view_x + content_w) {
-      vert_rects[vert_count++] =
-          (SDL_FRect){right_x, vis_top, line_w, vis_grid_h};
-    }
-  }
-#endif
-
   if (horz_count > 0) {
     SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
     SDL_RenderFillRects(g_renderer, horz_rects, horz_count);
+  }
+  free(horz_rects);
+
+  int max_v_separators = g_cols + 100;
+  SDL_FRect *vert_rects = malloc(max_v_separators * sizeof(SDL_FRect));
+  int vert_count = 0;
+  for (int i = 1; i < g_cols; i++) {
+    float sep_x = view_x - g_offset_x + sa->col_left[i] - line_w;
+    if (sep_x + line_w < view_x || sep_x > view_x + content_w)
+      continue;
+    vert_rects[vert_count++] = (SDL_FRect){sep_x, view_y, line_w, content_h};
+  }
+  if (g_cols > 0) {
+    float last_col_w = sa->col_widths[g_cols - 1];
+    float current_sep_x = view_x - g_offset_x + sa->col_left[g_cols - 1] +
+                          sa->col_widths[g_cols - 1];
+    int guard = 0;
+    while (current_sep_x <= view_x + content_w && guard < 10000) {
+      if (!(current_sep_x + line_w < view_x ||
+            current_sep_x > view_x + content_w)) {
+        vert_rects[vert_count++] =
+            (SDL_FRect){current_sep_x, view_y, line_w, content_h};
+      }
+      current_sep_x += last_col_w + line_w;
+      guard++;
+    }
   }
   if (vert_count > 0) {
     SDL_SetRenderDrawColour(g_renderer, GRID_LINE_COLOUR);
     SDL_RenderFillRects(g_renderer, vert_rects, vert_count);
   }
-  free(horz_rects);
   free(vert_rects);
-#endif
 #endif
 
   /* Draw selection border */

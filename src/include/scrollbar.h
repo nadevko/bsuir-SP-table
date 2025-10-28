@@ -1,4 +1,3 @@
-// include/scrollbar.h
 #pragma once
 #include "types.h"
 

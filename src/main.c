@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
 
   init_fs_log();
 
-  g_cols = DEFAULT_COLS;
+  g_cols = 4;
   g_rows = 1; /* Начинаем с 1 строки - заголовок */
   fprintf(stderr, "INIT: g_rows = %d (header row)\n", g_rows);
   atexit(cleanup);
@@ -107,6 +107,15 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  /* Initialize max column widths BEFORE setting header cells */
+  g_max_col_widths = calloc(g_cols, sizeof(int));
+  if (!g_max_col_widths) {
+    log_fs_error("Failed to allocate memory for max_col_widths");
+    if (argc == 1)
+      free(dir_path);
+    return 1;
+  }
+
   /* Заголовок: показываем канонический путь (реальный путь). */
   char *resolved = realpath(dir_path, NULL);
   if (!resolved) {
@@ -143,20 +152,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  /* These set_cell calls now automatically update g_max_col_widths! */
   set_cell(0, 1, "Size (bytes)");
   set_cell(0, 2, "Date");
   set_cell(0, 3, "Permissions");
-
-  g_max_col_widths = calloc(g_cols, sizeof(int));
-  if (!g_max_col_widths) {
-    log_fs_error("Failed to allocate memory for max_col_widths");
-    if (argc == 1)
-      free(dir_path);
-    return 1;
-  }
-  for (int c = 0; c < g_cols; c++) {
-    g_max_col_widths[c] = g_grid[0][c].text_width;
-  }
 
   g_grid_mutex = SDL_CreateMutex();
   if (!g_grid_mutex) {
@@ -204,13 +203,40 @@ int main(int argc, char *argv[]) {
 
   SDL_Event event;
   const int frame_delay_ms = 16;
+  unsigned long long last_total_bytes = 0ULL;
 
   while (running) {
     int win_w_local = 0, win_h_local = 0;
     SDL_GetWindowSize(g_window, &win_w_local, &win_h_local);
     SDL_LockMutex(g_grid_mutex);
 
+    /* Update headers if any totals changed */
+    if (g_total_bytes != last_total_bytes) {
+      if (g_grid && g_grid[0]) {
+        /* Re-render all header templates to reflect new totals */
+        const char *templates[] = {HEADER_TEMPLATE_0, HEADER_TEMPLATE_1,
+                                   HEADER_TEMPLATE_2, HEADER_TEMPLATE_3};
+        for (int c = 0; c < g_cols; ++c) {
+          const char *tpl =
+              (c < (int)(sizeof(templates) / sizeof(templates[0])))
+                  ? templates[c]
+                  : NULL;
+          char *rendered = render_header_template(tpl ? tpl : "");
+          if (rendered) {
+            set_cell_with_width_update(0, c, rendered);
+            free(rendered);
+          }
+        }
+      }
+      last_total_bytes = g_total_bytes;
+    }
+
+    /* IMPORTANT: sizeAllocate AFTER updating headers, so g_max_col_widths is
+     * current */
     SizeAlloc sa = sizeAllocate(win_w_local, win_h_local);
+
+    /* Clamp scroll offsets to valid range after layout recalculation */
+    scroll_clamp_all();
 
     /* КРИТИЧЕСКАЯ СИНХРОНИЗАЦИЯ: virtual scroll должен знать точное кол-во
      * строк */

@@ -68,5 +68,15 @@ extern int *g_col_widths;
 extern VirtualScrollState *g_vscroll;
 extern float g_last_content_h;
 
+/* Суммарный размер всех найденных файлов и директорий как они отображаются на
+ * диске */
+extern unsigned long long g_total_bytes;
+
+/* Суммарный размер только обычных файлов (без директорий) */
+extern unsigned long long g_total_file_bytes;
+
+/* Реальный размер на диске (блоки, с учётом фрагментации и метаданных) */
+extern unsigned long long g_total_disk_bytes;
+
 /* Prototypes */
 void cleanup(void);

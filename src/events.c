@@ -55,7 +55,7 @@ static void ensure_cell_visible_and_scroll(int row, int col) {
   float dx = desired_target_x - g_scroll_target_x;
   float dy = desired_target_y - g_scroll_target_y;
 
-#if SMOOTH_SCROLL
+#ifdef SMOOTH_SCROLL
   scroll_add_target(dx, dy);
 #else
   scroll_apply_immediate(dx, dy);
@@ -125,11 +125,11 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
     break;
 
   case SDL_EVENT_MOUSE_WHEEL: {
-    float scroll_factor = (NATURAL_SCROLL ? 1.0f : -1.0f);
+    float scroll_factor = SCROLL_FACTOR;
     float dy = scroll_factor * event->wheel.y * SCROLL_SPEED;
     float dx = -scroll_factor * event->wheel.x * SCROLL_SPEED;
 
-#if SMOOTH_SCROLL
+#ifdef SMOOTH_SCROLL
     if (g_dragging_vert && g_dragging_horz) {
       scroll_apply_immediate(dx, dy);
     } else if (g_dragging_vert) {

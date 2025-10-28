@@ -11,9 +11,14 @@ bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color) {
          0;
 }
 
-void set_cell(int row, int col, const char *text) {
+/* Unified cell update with width calculation.
+ * This function updates both the cell text AND updates g_max_col_widths
+ * if needed. This ensures headers, data rows, and dynamically updated cells
+ * all contribute to column width calculations. */
+void set_cell_with_width_update(int row, int col, const char *text) {
   if (row < 0 || row >= g_rows || col < 0 || col >= g_cols)
     return;
+
   free(g_grid[row][col].text);
   g_grid[row][col].text = strdup(text ? text : "");
   if (!g_grid[row][col].text) {
@@ -29,12 +34,25 @@ void set_cell(int row, int col, const char *text) {
   if (!success) {
     g_grid[row][col].text_width = 0;
     g_grid[row][col].text_height = 0;
+    return;
   }
+
+  /* Update max column width if this cell's text is wider */
+  if (g_max_col_widths && col < g_cols) {
+    g_max_col_widths[col] =
+        SDL_max(g_max_col_widths[col], g_grid[row][col].text_width);
+  }
+}
+
+/* Legacy function for backwards compatibility.
+ * Now delegates to set_cell_with_width_update. */
+void set_cell(int row, int col, const char *text) {
+  set_cell_with_width_update(row, col, text);
 }
 
 int init_fs_log(void) {
   const char *path = ERROR_LOG_PATH;
-  const char *mode = (ERROR_LOG_APPEND ? "a" : "w");
+  const char *mode = ERROR_LOG_MODE;
   FILE *f = fopen(path, mode);
   if (f) {
     g_log_file = f;

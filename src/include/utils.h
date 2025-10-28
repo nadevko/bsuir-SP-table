@@ -23,6 +23,14 @@
   } while (0)
 
 bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color);
+
+/* Unified cell update: sets text AND updates max column width.
+ * Use this for all cell modifications to ensure consistent width calculations.
+ */
+void set_cell_with_width_update(int row, int col, const char *text);
+
+/* Legacy wrapper for backwards compatibility.
+ * Calls set_cell_with_width_update internally. */
 void set_cell(int row, int col, const char *text);
 
 int init_fs_log(void);

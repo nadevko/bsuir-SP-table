@@ -39,7 +39,7 @@ void scroll_apply_immediate(float dx, float dy) {
 void scroll_clamp_all(void) { clamp_all_internal(); }
 
 void update_scroll(void) {
-#if SMOOTH_SCROLL
+#ifdef SMOOTH_SCROLL
   /* Параметры анимации — можно подстроить под вкусы/платформу */
   const float scroll_anim_factor = 0.22f; /* доля пути за кадр (0..1) */
   const float min_scroll_step =

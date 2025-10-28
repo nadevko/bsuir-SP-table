@@ -1,5 +1,4 @@
 #include "include/globals.h"
-#include "include/config.h"
 #include "include/types.h"
 #include "include/utils.h"
 #include "include/virtual_scroll.h"
@@ -12,8 +11,8 @@ SDL_Renderer *g_renderer = NULL;
 SDL_Window *g_window = NULL;
 TTF_Font *g_font = NULL;
 Cell **g_grid = NULL;
-int g_rows = DEFAULT_ROWS;
-int g_cols = DEFAULT_COLS;
+int g_rows = 0;
+int g_cols = 0;
 float g_offset_x = 0.0f;
 float g_offset_y = 0.0f;
 bool g_dragging_vert = false;
@@ -54,6 +53,15 @@ int *g_col_widths = NULL;
 
 VirtualScrollState *g_vscroll = NULL;
 float g_last_content_h = 0.0f;
+
+/* Суммарный размер всех найденных файлов (обновляется при обходе FS) */
+unsigned long long g_total_bytes = 0ULL;
+
+/* Суммарный размер только обычных файлов (без директорий) */
+unsigned long long g_total_file_bytes = 0ULL;
+
+/* Реальный размер на диске (блоки, с учётом фрагментации и метаданных) */
+unsigned long long g_total_disk_bytes = 0ULL;
 
 void cleanup(void) {
   if (g_vscroll) {
