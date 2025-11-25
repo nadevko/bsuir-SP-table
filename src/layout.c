@@ -50,7 +50,7 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
     return sa;
   }
 
-  /* Step 1: Calculate base widths from content */
+  /* Step 1: Get base widths from g_max_col_widths (content-based) */
   sa.col_widths = malloc((size_t)col_count * sizeof *sa.col_widths);
   if (!sa.col_widths) {
     sa.total_grid_w = 0.0f;
@@ -62,24 +62,31 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
     return sa;
   }
 
-  if (g_table) {
-    for (int c = 0; c < col_count; c++) {
-      sa.col_widths[c] = table_get_col_width(g_table, c);
+  int total_content_width = 0;
+  for (int c = 0; c < col_count; c++) {
+    int col_width = 0;
+
+    /* Use g_max_col_widths if available (tracks actual text widths) */
+    if (g_max_col_widths && c < g_cols) {
+      col_width = g_max_col_widths[c] + 2 * CELL_PADDING;
+    } else {
+      col_width = 100; /* Fallback */
     }
-  } else {
-    /* Fallback to g_max_col_widths */
-    for (int c = 0; c < col_count; c++) {
-      sa.col_widths[c] = (g_max_col_widths && c < g_cols)
-                             ? g_max_col_widths[c] + 2 * CELL_PADDING
-                             : 100;
+
+    /* Respect minimum width from config */
+    if (g_table) {
+      ColumnDef *col_def = table_get_column(g_table, c);
+      if (col_def) {
+        col_width = SDL_max(col_width, col_def->width_min);
+      }
     }
+
+    sa.col_widths[c] = col_width;
+    total_content_width += col_width;
   }
 
   /* Calculate total width with grid lines */
-  sa.total_grid_w = 0.0f;
-  for (int c = 0; c < col_count; c++) {
-    sa.total_grid_w += (float)sa.col_widths[c];
-  }
+  sa.total_grid_w = (float)total_content_width;
   /* Add grid lines between columns (only if more than 1 column) */
   if (col_count > 1) {
     sa.total_grid_w += (float)(col_count - 1) * line_w;
@@ -110,10 +117,12 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
   float available_w = view_w - (need_vert ? SCROLLBAR_WIDTH : 0.0f);
   float available_h = view_h - (need_horz ? SCROLLBAR_WIDTH : 0.0f);
 
-  /* Step 2: If content is smaller than available space, stretch columns */
-  if (sa.total_grid_w < available_w && col_count > 0) {
-    float extra_space = available_w - sa.total_grid_w;
-    float per_column = extra_space / (float)col_count;
+  /* Step 2: Calculate buffer zone (available space minus content) */
+  float buffer_zone = available_w - sa.total_grid_w;
+
+  /* Step 3: Distribute buffer zone equally among columns */
+  if (buffer_zone > 0 && col_count > 0) {
+    float per_column = buffer_zone / (float)col_count;
 
     for (int c = 0; c < col_count; c++) {
       sa.col_widths[c] = (int)((float)sa.col_widths[c] + per_column);
@@ -122,7 +131,7 @@ SizeAlloc sizeAllocate(int win_w, int win_h) {
     sa.total_grid_w = available_w;
   }
 
-  /* Recalculate scrollbar needs with stretched columns */
+  /* Recalculate scrollbar needs with final widths */
   need_horz = sa.total_grid_w > available_w;
   need_vert = total_grid_h > available_h;
 

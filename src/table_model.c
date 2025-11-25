@@ -1,4 +1,5 @@
 #include "include/table_model.h"
+#include "include/fs.h"
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <stdlib.h>
@@ -146,6 +147,9 @@ bool table_insert_row(TableModel *table, int row, void *data) {
   SDL_LockMutex(table->mutex);
   bool result =
       table->provider->ops.insert_row(table->provider->ctx, row, data);
+  if (result) {
+    table->widths_dirty = true; /* Mark for recalculation */
+  }
   SDL_UnlockMutex(table->mutex);
 
   return result;
@@ -157,6 +161,9 @@ bool table_delete_row(TableModel *table, int row) {
 
   SDL_LockMutex(table->mutex);
   bool result = table->provider->ops.delete_row(table->provider->ctx, row);
+  if (result) {
+    table->widths_dirty = true; /* Mark for recalculation */
+  }
   SDL_UnlockMutex(table->mutex);
 
   return result;
@@ -201,9 +208,9 @@ char *table_get_header(TableModel *table, int col_idx) {
     return col_def->render_header(col_def->user_data);
   }
 
-  /* Fallback to header_template */
+  /* Use header_template with substitutions (like %P, %b, etc.) */
   if (col_def->header_template) {
-    return strdup(col_def->header_template);
+    return render_header_template(col_def->header_template);
   }
 
   return strdup("");
@@ -291,35 +298,16 @@ void table_recalc_widths(TableModel *table, TTF_Font *font, int padding) {
 
   SDL_LockMutex(table->mutex);
 
-  int row_count = table->provider->ops.row_count(table->provider->ctx);
+  /* Use g_max_col_widths which was updated by set_cell_with_width_update */
+  extern int *g_max_col_widths;
+  extern int g_cols;
 
-  /* Step 1: Calculate content-based widths (at least width_min) */
   for (int c = 0; c < table->columns->count; c++) {
     int max_width = table->columns->columns[c].width_min;
 
-    /* Check header */
-    char *header = table->provider->ops.get_cell(table->provider->ctx, -1, c);
-    if (header) {
-      int w, h;
-      size_t len = strlen(header);
-      if (TTF_GetStringSize(font, header, len, &w, &h)) {
-        max_width = SDL_max(max_width, w + 2 * padding);
-      }
-      free(header);
-    }
-
-    /* Sample first N rows for width */
-    int sample_size = SDL_min(100, row_count);
-    for (int r = 0; r < sample_size; r++) {
-      char *cell = table->provider->ops.get_cell(table->provider->ctx, r, c);
-      if (cell) {
-        int w, h;
-        size_t len = strlen(cell);
-        if (TTF_GetStringSize(font, cell, len, &w, &h)) {
-          max_width = SDL_max(max_width, w + 2 * padding);
-        }
-        free(cell);
-      }
+    /* Use g_max_col_widths if available (tracks all text widths) */
+    if (g_max_col_widths && c < g_cols) {
+      max_width = g_max_col_widths[c] + 2 * padding;
     }
 
     /* Clamp to max */

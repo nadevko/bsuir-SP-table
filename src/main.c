@@ -219,15 +219,7 @@ int main(int argc, char *argv[]) {
     int win_w_local = 0, win_h_local = 0;
     SDL_GetWindowSize(g_window, &win_w_local, &win_h_local);
 
-    fprintf(stderr, "DEBUG: Checking vscroll initialization\n");
-    if (!g_vscroll) {
-      fprintf(stderr, "ERROR: g_vscroll is NULL!\n");
-      SDL_UnlockMutex(g_grid_mutex);
-      break;
-    }
-
-    if (!g_table) {
-      fprintf(stderr, "ERROR: g_table is NULL in main loop\n");
+    if (!g_vscroll || !g_table) {
       SDL_UnlockMutex(g_grid_mutex);
       break;
     }
@@ -246,21 +238,60 @@ int main(int argc, char *argv[]) {
         }
       }
       last_total_bytes = g_total_bytes;
+      table_mark_dirty(g_table, true, false); /* Mark widths dirty */
     }
 
-    /* Recalculate column widths if dirty */
-    if (table_is_widths_dirty(g_table)) {
-      table_recalc_widths(g_table, g_font, CELL_PADDING);
+    /* Reset g_max_col_widths before recalculating */
+    if (g_max_col_widths) {
+      for (int c = 0; c < g_cols; c++) {
+        g_max_col_widths[c] = 0;
+      }
     }
 
-    /* IMPORTANT: sizeAllocate AFTER updating headers */
+    /* Recalculate g_max_col_widths from actual table content */
+    int table_rows = table_get_row_count(g_table);
+
+    /* Check header row */
+    for (int c = 0; c < g_cols; c++) {
+      char *header = table_get_header(g_table, c);
+      if (header) {
+        int w, h;
+        size_t len = strlen(header);
+        if (TTF_GetStringSize(g_font, header, len, &w, &h)) {
+          if (g_max_col_widths) {
+            g_max_col_widths[c] = SDL_max(g_max_col_widths[c], w);
+          }
+        }
+        free(header);
+      }
+    }
+
+    /* Sample first 100 data rows */
+    int sample_size = SDL_min(100, table_rows);
+    for (int r = 0; r < sample_size; r++) {
+      for (int c = 0; c < g_cols; c++) {
+        char *cell = table_get_cell(g_table, r, c);
+        if (cell) {
+          int w, h;
+          size_t len = strlen(cell);
+          if (TTF_GetStringSize(g_font, cell, len, &w, &h)) {
+            if (g_max_col_widths) {
+              g_max_col_widths[c] = SDL_max(g_max_col_widths[c], w);
+            }
+          }
+          free(cell);
+        }
+      }
+    }
+
+    /* IMPORTANT: sizeAllocate AFTER calculating max widths */
     SizeAlloc sa = sizeAllocate(win_w_local, win_h_local);
 
     /* Clamp scroll offsets to valid range after layout recalculation */
     scroll_clamp_all();
 
     /* Update virtual scroll with actual table row count */
-    int table_rows = table_get_row_count(g_table);
+    table_rows = table_get_row_count(g_table);
     int total_display_rows = table_rows + 1; /* +1 for header */
 
     if (g_vscroll->total_virtual_rows != total_display_rows) {
@@ -270,15 +301,10 @@ int main(int argc, char *argv[]) {
     /* g_rows is only buffer size, not total rows */
     g_rows = VSCROLL_BUFFER_SIZE + 1;
 
-    fprintf(stderr, "DEBUG: vscroll_update_buffer_position\n");
-    if (g_vscroll && g_content_h > 0 && sa.row_height > 0) {
-      vscroll_update_buffer_position(g_vscroll, g_view_y, g_content_h,
-                                     sa.row_height);
-    }
+    vscroll_update_buffer_position(g_vscroll, g_view_y, g_content_h,
+                                   sa.row_height);
 
-    fprintf(stderr, "DEBUG: checking g_vscroll->needs_reload\n");
     if (g_vscroll && g_vscroll->needs_reload) {
-      fprintf(stderr, "DEBUG: vscroll needs reload, marking as complete\n");
       g_vscroll->needs_reload = false;
       g_vscroll->buffer_start_row = g_vscroll->desired_start_row;
       g_vscroll->buffer_count = VSCROLL_BUFFER_SIZE;

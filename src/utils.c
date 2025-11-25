@@ -1,6 +1,8 @@
 #include "include/utils.h"
 #include "include/config.h"
 #include "include/globals.h"
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -14,7 +16,8 @@ bool SDL_SetRenderDrawColour(SDL_Renderer *renderer, SDL_Color color) {
 /* Unified cell update with width calculation.
  * This function updates both the cell text AND updates g_max_col_widths
  * if needed. This ensures headers, data rows, and dynamically updated cells
- * all contribute to column width calculations. */
+ * all contribute to column width calculations.
+ */
 void set_cell_with_width_update(int row, int col, const char *text) {
   if (row < 0 || row >= g_rows || col < 0 || col >= g_cols)
     return;
@@ -42,10 +45,16 @@ void set_cell_with_width_update(int row, int col, const char *text) {
     g_max_col_widths[col] =
         SDL_max(g_max_col_widths[col], g_grid[row][col].text_width);
   }
+
+  /* Mark table widths as dirty so they get recalculated */
+  if (g_table) {
+    table_mark_dirty(g_table, true, false);
+  }
 }
 
-/* Legacy function for backwards compatibility.
- * Now delegates to set_cell_with_width_update. */
+/* Legacy wrapper for backwards compatibility.
+ * Calls set_cell_with_width_update internally.
+ */
 void set_cell(int row, int col, const char *text) {
   set_cell_with_width_update(row, col, text);
 }
