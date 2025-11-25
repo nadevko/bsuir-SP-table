@@ -23,14 +23,17 @@ void draw_with_alloc(const SizeAlloc *sa) {
   float view_y = g_view_y;
   float content_w = sa->content_w;
   float content_h = sa->content_h;
+
+  // КРИТИЧЕСКИ ВАЖНО: скроллбары рисуются ПОВЕРХ контента.
+  // Поэтому область клиппинга и видимости ячеек должна включать место под
+  // скроллбары.
+  float clip_w = sa->content_w + (sa->need_vert ? SCROLLBAR_WIDTH : 0.0f);
+  float clip_h = sa->content_h + (sa->need_horz ? SCROLLBAR_WIDTH : 0.0f);
+
   float line_w = GRID_LINE_WIDTH;
   float cell_h = sa->row_height;
   float row_full = cell_h + line_w;
 
-  /* КРИТИЧЕСКИ ВАЖНО: max_offset должен учитывать реальную высоту контента!
-     total_grid_h = g_rows * cell_h + (g_rows-1) * line_w
-     Это высота от верха первой строки до низа последней.
-     max_offset_y = то, насколько можно прокрутить = total_grid_h - content_h */
   float max_offset_x = SDL_max(0.0f, sa->total_grid_w - content_w);
   float max_offset_y = SDL_max(0.0f, sa->total_grid_h - content_h);
 
@@ -46,8 +49,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
   SDL_RenderFillRect(g_renderer,
                      &(SDL_FRect){view_x, view_y, content_w, content_h});
 
-  SDL_Rect clip_rect = {(int)view_x, (int)view_y, (int)content_w,
-                        (int)content_h};
+  SDL_Rect clip_rect = {(int)view_x, (int)view_y, (int)clip_w, (int)clip_h};
   SDL_SetRenderClipRect(g_renderer, &clip_rect);
 
 #ifdef WITH_GRID
@@ -59,12 +61,10 @@ void draw_with_alloc(const SizeAlloc *sa) {
   SDL_FRect *horz_rects = malloc(rows_needed * sizeof(SDL_FRect));
   int horz_count = 0;
 
-  /* ИСПРАВЛЕНИЕ: определяем первую видимую строку */
   int first_visible_row = (int)floorf(g_offset_y / row_full);
 
   for (int i = 0; i < rows_needed; i++) {
     int current_row = first_visible_row + i;
-    /* Не рисуем линию после последней строки */
     if (current_row >= g_rows)
       break;
 
@@ -110,12 +110,10 @@ void draw_with_alloc(const SizeAlloc *sa) {
   free(vert_rects);
 #endif
 
-  /* Draw selection border */
   if (g_selected_index >= 0 && g_selected_row >= 0 && g_selected_col >= 0 &&
       g_selected_row < g_rows && g_selected_col < g_cols && g_col_left &&
       g_col_widths) {
 
-    /* ИСПРАВЛЕНИЕ: используем относительные координаты */
     int first_visible_row = (int)floorf(g_offset_y / row_full);
     float offset_within_first = fmodf(g_offset_y, row_full);
     if (offset_within_first < 0.0f)
@@ -126,36 +124,33 @@ void draw_with_alloc(const SizeAlloc *sa) {
     float cell_y =
         view_y + row_offset_from_first * row_full - offset_within_first;
     float cell_wd = (float)g_col_widths[g_selected_col];
-    float cell_hh = sa->row_height;
+    float cell_h = sa->row_height;
 
     float bw = (float)HIGHLIGHT_BORDER_WIDTH;
-    float max_bw = SDL_min(cell_wd, cell_hh) / 2.0f;
+    float max_bw = SDL_min(cell_wd, cell_h) / 2.0f;
     if (bw > max_bw)
       bw = max_bw;
     if (bw <= 0.0f)
       bw = 1.0f;
 
     if (cell_x + cell_wd >= view_x && cell_x <= view_x + content_w &&
-        cell_y + cell_hh >= view_y && cell_y <= view_y + content_h) {
+        cell_y + cell_h >= view_y && cell_y <= view_y + content_h) {
 
       SDL_SetRenderDrawColour(g_renderer, HIGHLIGHT_BORDER_COLOUR);
 
       SDL_RenderFillRect(g_renderer, &(SDL_FRect){cell_x, cell_y, cell_wd, bw});
-      SDL_RenderFillRect(g_renderer, &(SDL_FRect){cell_x, cell_y, bw, cell_hh});
+      SDL_RenderFillRect(g_renderer, &(SDL_FRect){cell_x, cell_y, bw, cell_h});
       SDL_RenderFillRect(
-          g_renderer, &(SDL_FRect){cell_x + cell_wd - bw, cell_y, bw, cell_hh});
+          g_renderer, &(SDL_FRect){cell_x + cell_wd - bw, cell_y, bw, cell_h});
       SDL_RenderFillRect(
-          g_renderer, &(SDL_FRect){cell_x, cell_y + cell_hh - bw, cell_wd, bw});
+          g_renderer, &(SDL_FRect){cell_x, cell_y + cell_h - bw, cell_wd, bw});
     }
   }
 
-  /* Draw cell texts from virtual scroll buffer with texture caching */
   if (g_vscroll) {
-    /* Если буфер нужно перезагрузить, не рендерим — ждём данные */
     if (g_vscroll->needs_reload)
       goto skip_text_render;
 
-    /* Вычисляем первый видимый ряд для относительных координат */
     int first_visible_row = (int)floorf(g_offset_y / row_full);
     float offset_within_first = fmodf(g_offset_y, row_full);
     if (offset_within_first < 0.0f)
@@ -163,9 +158,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
     for (int buf_idx = 0; buf_idx < g_vscroll->buffer_count; buf_idx++) {
       int virtual_row = g_vscroll->buffer_start_row + buf_idx;
-
-      /* ИСПРАВЛЕНИЕ: считаем координаты относительно viewport,
-         а не умножаем virtual_row на большие числа */
       int row_offset_from_first = virtual_row - first_visible_row;
       float cell_y =
           view_y + row_offset_from_first * row_full - offset_within_first;
@@ -183,9 +175,8 @@ void draw_with_alloc(const SizeAlloc *sa) {
         if (!cell || !cell->text || cell->text[0] == '\0')
           continue;
 
-        SDL_Texture *label_texture = NULL;
-
-        label_texture = vscroll_get_cached_texture(g_vscroll, buf_idx, c);
+        SDL_Texture *label_texture =
+            vscroll_get_cached_texture(g_vscroll, buf_idx, c);
 
         if (!label_texture) {
           size_t len = strlen(cell->text);
@@ -198,7 +189,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
           label_texture =
               SDL_CreateTextureFromSurface(g_renderer, label_surface);
           SDL_DestroySurface(label_surface);
-
           if (!label_texture)
             continue;
 

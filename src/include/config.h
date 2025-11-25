@@ -70,7 +70,7 @@
 #define SCROLLBAR_THUMB_COLOUR (SDL_Color){100, 100, 100, 255}
 
 #define SMOOTH_SCROLL
-#define SCROLL_FACTOR 1.0f
+#define SCROLL_FACTOR -1.0f
 
 /* DATE_FORMAT_TEMPLATE is a strftime()-style format string used to format
  * file modification times shown in the grid.
