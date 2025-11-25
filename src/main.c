@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 
   /* Initialize headers from table */
   for (int c = 0; c < g_cols; c++) {
-    char *header = table_get_cell(g_table, -1, c);
+    char *header = table_get_header(g_table, c);
     if (header) {
       set_cell(0, c, header);
       free(header);
@@ -238,7 +238,7 @@ int main(int argc, char *argv[]) {
     if (g_total_bytes != last_total_bytes) {
       if (g_grid && g_grid[0]) {
         for (int c = 0; c < g_cols; ++c) {
-          char *header = table_get_cell(g_table, -1, c);
+          char *header = table_get_header(g_table, c);
           if (header) {
             set_cell_with_width_update(0, c, header);
             free(header);

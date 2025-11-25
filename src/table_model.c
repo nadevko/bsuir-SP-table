@@ -189,6 +189,26 @@ bool table_add_column(TableModel *table, ColumnDef col) {
   return true;
 }
 
+/* Helper: Get header text for a column */
+char *table_get_header(TableModel *table, int col_idx) {
+  if (!table || col_idx < 0 || col_idx >= table->columns->count)
+    return strdup("");
+
+  ColumnDef *col_def = &table->columns->columns[col_idx];
+
+  /* Use custom renderer if available */
+  if (col_def->render_header) {
+    return col_def->render_header(col_def->user_data);
+  }
+
+  /* Fallback to header_template */
+  if (col_def->header_template) {
+    return strdup(col_def->header_template);
+  }
+
+  return strdup("");
+}
+
 bool table_insert_column(TableModel *table, int col_idx, ColumnDef col) {
   if (!table || col_idx < 0 || col_idx > table->columns->count)
     return false;

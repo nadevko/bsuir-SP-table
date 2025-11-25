@@ -56,6 +56,9 @@ void table_recalc_widths(TableModel *table, TTF_Font *font, int padding);
 /* Get cached column width */
 int table_get_col_width(TableModel *table, int col_idx);
 
+/* Get rendered header text for column */
+char *table_get_header(TableModel *table, int col_idx);
+
 /* Mark structure/widths as dirty for recalculation */
 void table_mark_dirty(TableModel *table, bool widths, bool structure);
 

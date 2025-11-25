@@ -69,16 +69,18 @@ static void move_selection_by(int drow, int dcol) {
   int new_r = g_selected_row;
   int new_c = g_selected_col;
 
+  int min_row = ALLOW_HEADER_SELECTION ? 0 : 1;
+
   if (new_r < 0 || new_c < 0) {
-    new_r = 1; /* Start at first data row (after header) */
+    new_r = min_row;
     new_c = 0;
   } else {
     new_r += drow;
     new_c += dcol;
   }
 
-  if (new_r < 1)
-    new_r = 1;
+  if (new_r < min_row)
+    new_r = min_row;
   if (new_c < 0)
     new_c = 0;
   if (new_r >= total_rows)
@@ -260,16 +262,19 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
       if (in_row_y < 0.0f)
         in_row_y += row_full;
 
-      /* Check if click is on grid line */
       if (in_row_y >= cell_h) {
         g_selected_row = g_selected_col = g_selected_index = -1;
         return quit;
       }
 
-      /* For header row (row 0) and data rows */
       int total_rows = g_table ? table_get_row_count(g_table) + 1 : g_rows;
 
       if (row < 0 || row >= total_rows) {
+        g_selected_row = g_selected_col = g_selected_index = -1;
+        return quit;
+      }
+
+      if (row == 0 && !ALLOW_HEADER_SELECTION) {
         g_selected_row = g_selected_col = g_selected_index = -1;
         return quit;
       }

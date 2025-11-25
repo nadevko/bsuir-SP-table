@@ -182,7 +182,7 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
         if (virtual_row == 0) {
           /* Header row */
-          cell_text = table_get_cell(g_table, -1, c);
+          cell_text = table_get_header(g_table, c);
         } else {
           /* Data row */
           cell_text = table_get_cell(g_table, virtual_row - 1, c);

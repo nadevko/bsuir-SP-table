@@ -34,7 +34,6 @@
 #define PERM_TEMPLATE "%S %T %u %g %o"
 
 // #define SHOW_FILE_RELATIVE_PATH
-
 #define WITH_BORDER
 #define BORDER_COLOUR (SDL_Color){100, 100, 100, 255}
 #define BORDER_WIDTH 2
@@ -48,6 +47,9 @@
  * толщина */
 #define HIGHLIGHT_BORDER_COLOUR (SDL_Color){200, 0, 0, 255}
 #define HIGHLIGHT_BORDER_WIDTH 3
+
+/* Allow selecting header row (row 0) */
+#define ALLOW_HEADER_SELECTION 0
 
 #define WITH_FONTCONFIG
 
@@ -82,6 +84,7 @@
 
 /* --- Header templates (user-configurable) ---
  * Supported substitutions:
+ *
  *  %% -> literal '%'
  *  %P -> canonical (resolved) path to the directory passed to the program
  *  %p -> original (as-passed) path to the directory
