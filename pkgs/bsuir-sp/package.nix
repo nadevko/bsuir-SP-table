@@ -4,13 +4,12 @@
   sdl3,
   sdl3-ttf,
   fontconfig,
-  ...
 }:
 stdenv.mkDerivation {
   pname = "bsuir-sp";
   version = "1.0";
 
-  src = ../.;
+  src = ../..;
 
   buildInputs = [
     sdl3
