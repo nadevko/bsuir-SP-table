@@ -2,13 +2,16 @@
 #include "include/config.h"
 #include "include/globals.h"
 #include "include/scroll.h"
+#include "include/table_model.h"
 #include <SDL3/SDL_events.h>
 #include <math.h>
 
 static void ensure_cell_visible_and_scroll(int row, int col) {
   if (!g_col_left || !g_col_widths)
     return;
-  if (row >= g_rows)
+
+  int total_rows = g_table ? table_get_row_count(g_table) + 1 : g_rows;
+  if (row >= total_rows)
     return;
 
   float cell_x = g_col_left[col];
@@ -61,23 +64,25 @@ static void ensure_cell_visible_and_scroll(int row, int col) {
 }
 
 static void move_selection_by(int drow, int dcol) {
+  int total_rows = g_table ? table_get_row_count(g_table) + 1 : g_rows;
+
   int new_r = g_selected_row;
   int new_c = g_selected_col;
 
   if (new_r < 0 || new_c < 0) {
-    new_r = 0;
+    new_r = 1; /* Start at first data row (after header) */
     new_c = 0;
   } else {
     new_r += drow;
     new_c += dcol;
   }
 
-  if (new_r < 0)
-    new_r = 0;
+  if (new_r < 1)
+    new_r = 1;
   if (new_c < 0)
     new_c = 0;
-  if (new_r >= g_rows)
-    new_r = g_rows - 1;
+  if (new_r >= total_rows)
+    new_r = total_rows - 1;
   if (new_c >= g_cols)
     new_c = g_cols - 1;
 
@@ -168,11 +173,11 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
 
           if (my >= (int)thumb_y && my < (int)(thumb_y + thumb_h)) {
             g_dragging_vert = true;
-            g_drag_start_pos = my;
+            g_drag_start_pos = (float)my;
             g_drag_start_offset = g_offset_y;
             g_scroll_target_y = g_offset_y;
           } else {
-            float click_pos = my - vert_bar_y;
+            float click_pos = (float)(my - vert_bar_y);
             float track_h = vert_bar_h - thumb_h;
             float thumb_center_min = thumb_h / 2.0f;
             float thumb_center_max = vert_bar_h - thumb_h / 2.0f;
@@ -207,11 +212,11 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
 
           if (mx >= (int)thumb_x && mx < (int)(thumb_x + thumb_w)) {
             g_dragging_horz = true;
-            g_drag_start_pos = mx;
+            g_drag_start_pos = (float)mx;
             g_drag_start_offset = g_offset_x;
             g_scroll_target_x = g_offset_x;
           } else {
-            float click_pos = mx - horz_bar_x;
+            float click_pos = (float)(mx - horz_bar_x);
             float track_w = horz_bar_w - thumb_w;
             float thumb_center_min = thumb_w / 2.0f;
             float thumb_center_max = horz_bar_w - thumb_w / 2.0f;
@@ -255,7 +260,16 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
       if (in_row_y < 0.0f)
         in_row_y += row_full;
 
-      if (row < 0 || row >= g_rows || in_row_y >= cell_h) {
+      /* Check if click is on grid line */
+      if (in_row_y >= cell_h) {
+        g_selected_row = g_selected_col = g_selected_index = -1;
+        return quit;
+      }
+
+      /* For header row (row 0) and data rows */
+      int total_rows = g_table ? table_get_row_count(g_table) + 1 : g_rows;
+
+      if (row < 0 || row >= total_rows) {
         g_selected_row = g_selected_col = g_selected_index = -1;
         return quit;
       }
@@ -301,7 +315,7 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
           SDL_max(10.0f, content_h_local * (content_h_local / g_total_grid_h));
       float max_offset_y = SDL_max(0.0f, g_total_grid_h - content_h_local);
       float track_h = content_h_local - thumb_h;
-      float dy = event->motion.y - g_drag_start_pos;
+      float dy = (float)event->motion.y - g_drag_start_pos;
       float scroll_factor = (track_h > 0.0f) ? (max_offset_y / track_h) : 0.0f;
       g_offset_y = g_drag_start_offset + dy * scroll_factor;
       g_scroll_target_y = g_offset_y;
@@ -312,7 +326,7 @@ bool handle_events(SDL_Event *event, int win_w_local, int win_h_local) {
           SDL_max(10.0f, content_w_local * (content_w_local / g_total_grid_w));
       float max_offset_x = SDL_max(0.0f, g_total_grid_w - content_w_local);
       float track_w = content_w_local - thumb_w;
-      float dx = event->motion.x - g_drag_start_pos;
+      float dx = (float)event->motion.x - g_drag_start_pos;
       float scroll_factor = (track_w > 0.0f) ? (max_offset_x / track_w) : 0.0f;
       g_offset_x = g_drag_start_offset + dx * scroll_factor;
       g_scroll_target_x = g_offset_x;

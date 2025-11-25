@@ -3,6 +3,7 @@
 #include "include/config.h"
 #include "include/globals.h"
 #include "include/scrollbar.h"
+#include "include/table_model.h"
 #include "include/utils.h"
 #include "include/virtual_scroll.h"
 #include <math.h>
@@ -24,9 +25,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
   float content_w = sa->content_w;
   float content_h = sa->content_h;
 
-  // КРИТИЧЕСКИ ВАЖНО: скроллбары рисуются ПОВЕРХ контента.
-  // Поэтому область клиппинга и видимости ячеек должна включать место под
-  // скроллбары.
   float clip_w = sa->content_w + (sa->need_vert ? SCROLLBAR_WIDTH : 0.0f);
   float clip_h = sa->content_h + (sa->need_horz ? SCROLLBAR_WIDTH : 0.0f);
 
@@ -63,9 +61,11 @@ void draw_with_alloc(const SizeAlloc *sa) {
 
   int first_visible_row = (int)floorf(g_offset_y / row_full);
 
+  int total_rows = g_vscroll ? g_vscroll->total_virtual_rows : g_rows;
+
   for (int i = 0; i < rows_needed; i++) {
     int current_row = first_visible_row + i;
-    if (current_row >= g_rows)
+    if (current_row >= total_rows)
       break;
 
     float sep_y = first_row_top_y + i * row_full + cell_h;
@@ -111,8 +111,8 @@ void draw_with_alloc(const SizeAlloc *sa) {
 #endif
 
   if (g_selected_index >= 0 && g_selected_row >= 0 && g_selected_col >= 0 &&
-      g_selected_row < g_rows && g_selected_col < g_cols && g_col_left &&
-      g_col_widths) {
+      g_selected_row < (g_vscroll ? g_vscroll->total_virtual_rows : g_rows) &&
+      g_selected_col < g_cols && g_col_left && g_col_widths) {
 
     int first_visible_row = (int)floorf(g_offset_y / row_full);
     float offset_within_first = fmodf(g_offset_y, row_full);
@@ -137,7 +137,6 @@ void draw_with_alloc(const SizeAlloc *sa) {
         cell_y + cell_h >= view_y && cell_y <= view_y + content_h) {
 
       SDL_SetRenderDrawColour(g_renderer, HIGHLIGHT_BORDER_COLOUR);
-
       SDL_RenderFillRect(g_renderer, &(SDL_FRect){cell_x, cell_y, cell_wd, bw});
       SDL_RenderFillRect(g_renderer, &(SDL_FRect){cell_x, cell_y, bw, cell_h});
       SDL_RenderFillRect(
@@ -156,8 +155,15 @@ void draw_with_alloc(const SizeAlloc *sa) {
     if (offset_within_first < 0.0f)
       offset_within_first += row_full;
 
-    for (int buf_idx = 0; buf_idx < g_vscroll->buffer_count; buf_idx++) {
-      int virtual_row = g_vscroll->buffer_start_row + buf_idx;
+    int table_rows = g_table ? table_get_row_count(g_table) : 0;
+
+    for (int virtual_row = first_visible_row;
+         virtual_row < first_visible_row + (int)ceilf(content_h / row_full) + 1;
+         virtual_row++) {
+
+      if (virtual_row < 0 || virtual_row >= table_rows + 1)
+        continue;
+
       int row_offset_from_first = virtual_row - first_visible_row;
       float cell_y =
           view_y + row_offset_from_first * row_full - offset_within_first;
@@ -171,33 +177,42 @@ void draw_with_alloc(const SizeAlloc *sa) {
         if (cell_x + sa->col_widths[c] < view_x || cell_x > view_x + content_w)
           continue;
 
-        Cell *cell = vscroll_get_cell(g_vscroll, virtual_row, c);
-        if (!cell || !cell->text || cell->text[0] == '\0')
+        char *cell_text = NULL;
+        int text_w = 0, text_h = 0;
+
+        if (virtual_row == 0) {
+          /* Header row */
+          cell_text = table_get_cell(g_table, -1, c);
+        } else {
+          /* Data row */
+          cell_text = table_get_cell(g_table, virtual_row - 1, c);
+        }
+
+        if (!cell_text || cell_text[0] == '\0') {
+          free(cell_text);
           continue;
+        }
+
+        size_t len = strlen(cell_text);
+        SDL_Surface *label_surface = TTF_RenderText_LCD(
+            g_font, cell_text, len, TEXT_FONT_COLOUR, GRID_BACKGROUND_COLOUR);
+        if (!label_surface) {
+          free(cell_text);
+          continue;
+        }
+
+        text_w = label_surface->w;
+        text_h = label_surface->h;
 
         SDL_Texture *label_texture =
-            vscroll_get_cached_texture(g_vscroll, buf_idx, c);
-
+            SDL_CreateTextureFromSurface(g_renderer, label_surface);
+        SDL_DestroySurface(label_surface);
         if (!label_texture) {
-          size_t len = strlen(cell->text);
-          SDL_Surface *label_surface =
-              TTF_RenderText_LCD(g_font, cell->text, len, TEXT_FONT_COLOUR,
-                                 GRID_BACKGROUND_COLOUR);
-          if (!label_surface)
-            continue;
-
-          label_texture =
-              SDL_CreateTextureFromSurface(g_renderer, label_surface);
-          SDL_DestroySurface(label_surface);
-          if (!label_texture)
-            continue;
-
-          vscroll_set_cached_texture(g_vscroll, buf_idx, c, label_texture);
+          free(cell_text);
+          continue;
         }
 
         float padding_x = 0, padding_y = 0;
-        int text_w = cell->text_width;
-        int text_h = cell->text_height;
 
 #if TEXT_FONT_POSITION_HORIZONTAL == LEFT
         padding_x = CELL_PADDING;
@@ -218,6 +233,9 @@ void draw_with_alloc(const SizeAlloc *sa) {
         SDL_RenderTexture(g_renderer, label_texture, NULL,
                           &(SDL_FRect){cell_x + padding_x, cell_y + padding_y,
                                        (float)text_w, (float)text_h});
+
+        SDL_DestroyTexture(label_texture);
+        free(cell_text);
       }
     }
   }

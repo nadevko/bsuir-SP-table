@@ -1,6 +1,7 @@
 /* include/globals.h */
 #pragma once
 
+#include "table_model.h"
 #include "types.h"
 #include "virtual_scroll.h"
 #include <SDL3/SDL.h>
@@ -11,6 +12,11 @@
 extern SDL_Renderer *g_renderer;
 extern SDL_Window *g_window;
 extern TTF_Font *g_font;
+
+/* NEW: Table model replaces direct grid access */
+extern TableModel *g_table;
+
+/* Legacy grid access (kept for backward compatibility, will be removed) */
 extern Cell **g_grid;
 extern int g_rows;
 extern int g_cols;
